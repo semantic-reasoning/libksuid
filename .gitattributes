@@ -1,0 +1,6 @@
+# Force LF line endings on configure_file templates so substitution
+# output is byte-identical regardless of which platform the
+# checkout happened on -- otherwise CRLF on Windows runners would
+# leak into the generated header and break reproducible-build
+# comparisons. Every other file is left to the global git config.
+*.h.in text eol=lf

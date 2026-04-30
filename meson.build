@@ -70,6 +70,12 @@ endif
 inc = include_directories('.')
 public_headers = files('libksuid/ksuid.h')
 
+# Generate libksuid/ksuid_version.h alongside the source tree's
+# libksuid/. The configure_file lives in libksuid/meson.build so
+# its output lands at ${MESON_BUILD_ROOT}/libksuid/ksuid_version.h
+# and resolves through |inc| as <libksuid/ksuid_version.h>.
+subdir('libksuid')
+
 core_sources = files(
   'libksuid/ksuid.c',
   'libksuid/base62.c',

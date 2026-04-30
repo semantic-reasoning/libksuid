@@ -24,3 +24,8 @@ coverage/
 .DS_Store
 .omc/
 *~
+
+# Belt-and-braces: configure_file output normally lives under build/
+# (already ignored), but if a stranger generates it in-tree we still
+# want git to refuse to track the auto-generated copy.
+libksuid/ksuid_version.h

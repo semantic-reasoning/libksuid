@@ -111,6 +111,7 @@ jobs:
           DESTDIR="$PWD/staging" meson install -C builddir
           # Architecture-independent paths are stable.
           test -f staging/usr/local/include/libksuid/ksuid.h
+          test -f staging/usr/local/include/libksuid/ksuid_version.h
           test -f staging/usr/local/share/doc/libksuid/LICENSE
           test -f staging/usr/local/share/doc/libksuid/LICENSE.MIT
           test -f staging/usr/local/share/doc/libksuid/NOTICE
@@ -121,6 +122,45 @@ jobs:
           find staging -name 'libksuid.pc' -print | grep -q .
           find staging -name 'libksuid.a'  -print | grep -q .
           find staging -name 'libksuid.so' -print | grep -q .
+
+  # ==========================================================================
+  # Phase 2b: meson dist round-trip
+  # Builds a source tarball, extracts it into a clean tree, and rebuilds
+  # the library + tests from the tarball. Catches reproducibility
+  # regressions in configure_file templates (R2 from issue #3): if a
+  # future contributor adds vcs_tag, __DATE__, or anything build-time-
+  # variable to a generated header, this job fails before the PR can
+  # land. Runs in parallel to the build matrix.
+  # ==========================================================================
+  dist:
+    name: meson dist round-trip
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0      # meson dist needs full git history
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build
+
+      - name: Build source tarball
+        run: |
+          meson setup builddir-dist
+          meson dist -C builddir-dist --no-tests --formats xztar
+
+      - name: Rebuild from tarball + run tests
+        run: |
+          set -eux
+          tarball=$(ls builddir-dist/meson-dist/libksuid-*.tar.xz)
+          extract_root=$(mktemp -d)
+          tar -xJf "$tarball" -C "$extract_root"
+          src=$(ls -d "$extract_root"/libksuid-*)
+          meson setup "$src/build"
+          meson compile -C "$src/build"
+          meson test -C "$src/build" --print-errorlogs
 
   # ==========================================================================
   # Phase 3: Sanitizers (ASan + UBSan)

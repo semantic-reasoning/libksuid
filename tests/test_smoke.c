@@ -48,6 +48,34 @@ test_compare_first_byte_dominates (void)
   ASSERT_TRUE (ksuid_compare (&b, &a) < 0);
 }
 
+static void
+test_version_macros_are_consistent (void)
+{
+  /* DELIBERATE SYNC POINT: these literal values must equal the
+   * `version :` field in the top-level meson.build. The test exists
+   * to prove that meson.project_version() flows through the
+   * configure_file substitution into ksuid_version.h.in -- a
+   * `>= 0` check would silently accept an empty @VERSION_MAJOR@
+   * substitution that the C preprocessor turns into 0. A real
+   * regression in the substitution chain therefore fails here.
+   *
+   * When you bump meson.build's project version you MUST update
+   * these four asserts in the same commit. */
+  ASSERT_EQ_INT (KSUID_VERSION_MAJOR, 0);
+  ASSERT_EQ_INT (KSUID_VERSION_MINOR, 1);
+  ASSERT_EQ_INT (KSUID_VERSION_PATCH, 0);
+  ASSERT_EQ_STR (KSUID_VERSION_STRING, "0.1.0");
+
+  /* The composite KSUID_VERSION must equal the documented
+   * (MAJOR << 16) | (MINOR << 8) | PATCH layout for `#if
+   * KSUID_VERSION >= ...` arithmetic to behave the way callers
+   * expect. */
+  int composed = (KSUID_VERSION_MAJOR << 16)
+      | (KSUID_VERSION_MINOR << 8)
+      | (KSUID_VERSION_PATCH);
+  ASSERT_EQ_INT (KSUID_VERSION, composed);
+}
+
 int
 main (void)
 {
@@ -56,5 +84,6 @@ main (void)
   RUN_TEST (test_max_is_all_ff);
   RUN_TEST (test_compare_orders_lex);
   RUN_TEST (test_compare_first_byte_dominates);
+  RUN_TEST (test_version_macros_are_consistent);
   TEST_MAIN_END ();
 }
