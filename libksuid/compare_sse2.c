@@ -14,6 +14,25 @@
 
 #include <libksuid/compare_simd.h>
 
+/* MSVC has no __builtin_ctz; use the BitScanForward intrinsic from
+ * <intrin.h>. GCC/Clang inline the builtin to BSF / TZCNT directly. */
+#if defined(_MSC_VER) && !defined(__clang__)
+#  include <intrin.h>
+static inline int
+ksuid_ctz32 (unsigned x)
+{
+  unsigned long idx;
+  _BitScanForward (&idx, x);
+  return (int) idx;
+}
+#else
+static inline int
+ksuid_ctz32 (unsigned x)
+{
+  return __builtin_ctz (x);
+}
+#endif
+
 /* find_first_diff: given a 16-bit movemask of byte-equal results
  * (1 == equal in lane), return the index of the first DIFFERING
  * byte, or 16 if all 16 lanes were equal. */
@@ -23,7 +42,7 @@ ksuid_first_diff_sse2 (int eq_mask)
   unsigned diff = (~(unsigned) eq_mask) & 0xffffu;
   if (diff == 0)
     return 16;
-  return __builtin_ctz (diff);
+  return ksuid_ctz32 (diff);
 }
 
 int
