@@ -12,7 +12,7 @@ threads_dep = dependency('threads', required : false)
 base_tests = ['test_smoke', 'test_parts', 'test_base62', 'test_parse_format',
               'test_sequence', 'test_rand_os',
               'test_chacha20', 'test_new', 'test_simd_parity',
-              'test_wipe']
+              'test_wipe', 'test_compare_parity']
 
 foreach t : base_tests
   exe = executable(t, t + '.c',

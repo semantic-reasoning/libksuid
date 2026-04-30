@@ -15,6 +15,7 @@
 
 #include <libksuid/base62.h>
 #include <libksuid/byteorder.h>
+#include <libksuid/compare_simd.h>
 #include <libksuid/rand.h>
 
 /* Drive both definitions from the public KSUID_*_INIT macros so the
@@ -36,10 +37,11 @@ ksuid_is_nil (const ksuid_t *id)
 int
 ksuid_compare (const ksuid_t *a, const ksuid_t *b)
 {
-  /* memcmp returns the byte difference on glibc but the spec only
-   * guarantees the sign; normalize to {-1, 0, +1} for portability. */
-  int r = memcmp (a->b, b->b, KSUID_BYTES);
-  return (r > 0) - (r < 0);
+  /* Dispatch through KSUID_COMPARE20 -- compile-time-selected
+   * SSE2 / NEON / scalar kernel. All three implementations agree
+   * on the {-1, 0, +1} contract and on lexicographic byte order;
+   * tests/test_compare_parity.c pins the equivalence. */
+  return KSUID_COMPARE20 (a->b, b->b);
 }
 
 ksuid_err_t

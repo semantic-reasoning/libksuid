@@ -152,6 +152,7 @@ core_sources = files(
   'libksuid/rand_os.c',
   'libksuid/rand_tls.c',
   'libksuid/chacha20.c',
+  'libksuid/compare_scalar.c',
 )
 
 # SIMD / NEON acceleration. SSE2 is part of the x86_64 ABI baseline
@@ -163,13 +164,22 @@ core_sources = files(
 host_cpu = host_machine.cpu_family()
 if get_option('simd') != 'none'
   if host_cpu == 'x86_64'
-    core_sources += files('libksuid/base62_sse2.c')
+    core_sources += files(
+      'libksuid/base62_sse2.c',
+      'libksuid/compare_sse2.c',
+    )
     common_args += '-DKSUID_HAVE_SSE2=1'
   elif host_cpu in ['aarch64', 'arm64']
-    core_sources += files('libksuid/base62_neon.c')
+    core_sources += files(
+      'libksuid/base62_neon.c',
+      'libksuid/compare_neon.c',
+    )
     common_args += '-DKSUID_HAVE_NEON=1'
   elif host_cpu == 'arm' and cc.has_argument('-mfpu=neon')
-    core_sources += files('libksuid/base62_neon.c')
+    core_sources += files(
+      'libksuid/base62_neon.c',
+      'libksuid/compare_neon.c',
+    )
     common_args += '-DKSUID_HAVE_NEON=1'
   endif
 endif
