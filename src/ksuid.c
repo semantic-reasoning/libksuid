@@ -9,6 +9,7 @@
  */
 #include <ksuid.h>
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "base62.h"
@@ -120,4 +121,34 @@ void
 ksuid_format (const ksuid_t *id, char out[KSUID_STRING_LEN])
 {
   ksuid_base62_encode ((uint8_t *) out, id->b);
+}
+
+/* qsort callback. Stability is irrelevant for KSUIDs because compare
+ * uses every byte of the 20-byte representation. */
+static int
+ksuid_qsort_compare (const void *a, const void *b)
+{
+  return ksuid_compare ((const ksuid_t *) a, (const ksuid_t *) b);
+}
+
+void
+ksuid_sort (ksuid_t *ids, size_t n)
+{
+  /* Upstream Go ships a naive Lomuto quicksort that degrades to O(n^2)
+   * on already-sorted or reverse-sorted input (ksuid.go:332-352). The
+   * C library's qsort is allowed to use a worst-case O(n log n)
+   * algorithm and avoids that hazard for the standard cost of an
+   * indirect compare callback. */
+  if (n > 1)
+    qsort (ids, n, sizeof (ksuid_t), ksuid_qsort_compare);
+}
+
+bool
+ksuid_is_sorted (const ksuid_t *ids, size_t n)
+{
+  for (size_t i = 1; i < n; ++i) {
+    if (ksuid_compare (&ids[i - 1], &ids[i]) > 0)
+      return false;
+  }
+  return true;
 }

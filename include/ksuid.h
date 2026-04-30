@@ -125,6 +125,17 @@ extern "C"
   KSUID_PUBLIC void ksuid_format (const ksuid_t * id,
       char out[KSUID_STRING_LEN]);
 
+/* --------------------------------------------------------------------------
+ * Bulk ordering.
+ * -------------------------------------------------------------------------- */
+
+/* In-place ascending sort of |ids| (n elements) under ksuid_compare. */
+  KSUID_PUBLIC void ksuid_sort (ksuid_t * ids, size_t n);
+
+/* True iff |ids| is in non-decreasing order under ksuid_compare. An empty
+ * array is sorted by definition. */
+  KSUID_PUBLIC bool ksuid_is_sorted (const ksuid_t * ids, size_t n);
+
 #ifdef __cplusplus
 }                               /* extern "C" */
 #endif
