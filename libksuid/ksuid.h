@@ -86,11 +86,6 @@ extern "C"
   KSUID_PUBLIC ksuid_err_t ksuid_from_parts (ksuid_t * out,
       int64_t unix_seconds, const uint8_t * payload, size_t payload_len);
 
-/* Convenience wrappers that return KSUID_NIL on any error. */
-  KSUID_PUBLIC ksuid_t ksuid_from_bytes_or_nil (const uint8_t * b, size_t n);
-  KSUID_PUBLIC ksuid_t ksuid_from_parts_or_nil (int64_t unix_seconds,
-      const uint8_t * payload, size_t payload_len);
-
 /* --------------------------------------------------------------------------
  * Field accessors.
  * -------------------------------------------------------------------------- */
@@ -119,7 +114,6 @@ extern "C"
  * once the input has been fully validated. */
   KSUID_PUBLIC ksuid_err_t ksuid_parse (ksuid_t * out, const char *s,
       size_t len);
-  KSUID_PUBLIC ksuid_t ksuid_parse_or_nil (const char *s, size_t len);
 
 /* Write the 27-character base62 representation of |id| into |out|. The
  * output is NOT NUL-terminated; callers needing a C string should size

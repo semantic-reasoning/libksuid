@@ -65,25 +65,6 @@ ksuid_from_parts (ksuid_t *out,
   return KSUID_OK;
 }
 
-ksuid_t
-ksuid_from_bytes_or_nil (const uint8_t *b, size_t n)
-{
-  ksuid_t out;
-  if (ksuid_from_bytes (&out, b, n) != KSUID_OK)
-    return KSUID_NIL;
-  return out;
-}
-
-ksuid_t
-ksuid_from_parts_or_nil (int64_t unix_seconds,
-    const uint8_t *payload, size_t payload_len)
-{
-  ksuid_t out;
-  if (ksuid_from_parts (&out, unix_seconds, payload, payload_len) != KSUID_OK)
-    return KSUID_NIL;
-  return out;
-}
-
 uint32_t
 ksuid_timestamp (const ksuid_t *id)
 {
@@ -117,15 +98,6 @@ ksuid_parse (ksuid_t *out, const char *s, size_t len)
     return e;
   *out = tmp;
   return KSUID_OK;
-}
-
-ksuid_t
-ksuid_parse_or_nil (const char *s, size_t len)
-{
-  ksuid_t out;
-  if (ksuid_parse (&out, s, len) != KSUID_OK)
-    return KSUID_NIL;
-  return out;
 }
 
 void

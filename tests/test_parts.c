@@ -31,15 +31,6 @@ test_from_bytes_size_errors (void)
 }
 
 static void
-test_from_bytes_or_nil_returns_nil_on_error (void)
-{
-  ksuid_t bad = ksuid_from_bytes_or_nil (kSampleBytes, 19);
-  ASSERT_TRUE (ksuid_is_nil (&bad));
-  ksuid_t ok = ksuid_from_bytes_or_nil (kSampleBytes, KSUID_BYTES);
-  ASSERT_EQ_BYTES (ok.b, kSampleBytes, KSUID_BYTES);
-}
-
-static void
 test_from_parts_writes_be_timestamp_and_payload (void)
 {
   ksuid_t id = KSUID_NIL;
@@ -106,7 +97,6 @@ main (void)
 {
   RUN_TEST (test_from_bytes_round_trip);
   RUN_TEST (test_from_bytes_size_errors);
-  RUN_TEST (test_from_bytes_or_nil_returns_nil_on_error);
   RUN_TEST (test_from_parts_writes_be_timestamp_and_payload);
   RUN_TEST (test_from_parts_rejects_short_payload);
   RUN_TEST (test_from_parts_rejects_out_of_range_time);

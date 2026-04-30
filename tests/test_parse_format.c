@@ -69,15 +69,6 @@ test_parse_value_error_does_not_mutate_out (void)
 }
 
 static void
-test_parse_or_nil (void)
-{
-  ksuid_t bad = ksuid_parse_or_nil (kSampleStr, 26);
-  ASSERT_TRUE (ksuid_is_nil (&bad));
-  ksuid_t ok = ksuid_parse_or_nil (kSampleStr, KSUID_STRING_LEN);
-  ASSERT_EQ_BYTES (ok.b, kSampleBytes, KSUID_BYTES);
-}
-
-static void
 test_format_golden (void)
 {
   char out[KSUID_STRING_LEN];
@@ -121,7 +112,6 @@ main (void)
   RUN_TEST (test_parse_size_errors);
   RUN_TEST (test_parse_value_errors);
   RUN_TEST (test_parse_value_error_does_not_mutate_out);
-  RUN_TEST (test_parse_or_nil);
   RUN_TEST (test_format_golden);
   RUN_TEST (test_round_trip);
   TEST_MAIN_END ();
