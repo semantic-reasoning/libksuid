@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
-#include <ksuid.h>
+#include <libksuid/ksuid.h>
 #include "test_util.h"
 
 #include <time.h>

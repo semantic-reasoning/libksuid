@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
-#include "../src/rand.h"
+#include <libksuid/rand.h>
 #include "test_util.h"
 
 #include <threads.h>

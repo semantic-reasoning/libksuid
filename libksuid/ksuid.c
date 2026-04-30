@@ -7,17 +7,17 @@
  *   - Compare = bytes.Compare(a, b):                   ksuid.go:308-311
  *   - FromBytes / FromParts / Timestamp / Payload:     ksuid.go:74-81, 247-294
  */
-#include <ksuid.h>
+#include <libksuid/ksuid.h>
 
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-#include "base62.h"
-#include "byteorder.h"
-#include "rand.h"
-#include "uint128.h"
+#include <libksuid/base62.h>
+#include <libksuid/byteorder.h>
+#include <libksuid/rand.h>
+#include <libksuid/uint128.h>
 
 KSUID_PUBLIC const ksuid_t KSUID_NIL = {.b = {0} };
 

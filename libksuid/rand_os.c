@@ -18,7 +18,7 @@
  * silently producing predictable bytes from an ID generator is a far
  * worse outcome than a clean error.
  */
-#include "rand.h"
+#include <libksuid/rand.h>
 
 #if defined(KSUID_HAVE_BCRYPT)
 /* Windows path: BCryptGenRandom is the documented modern API for

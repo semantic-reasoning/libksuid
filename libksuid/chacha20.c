@@ -8,7 +8,7 @@
  * http://cr.yp.to/chacha.html. This translation is contributed under
  * LGPL-3.0-or-later.
  */
-#include "chacha20.h"
+#include <libksuid/chacha20.h>
 
 #include <string.h>
 

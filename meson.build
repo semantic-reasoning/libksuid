@@ -50,16 +50,20 @@ foreach a : ['-Wshadow', '-Wstrict-prototypes', '-Wpointer-arith',
 endforeach
 add_project_arguments(common_args, language : 'c')
 
-inc = include_directories('include')
-public_headers = files('include/ksuid.h')
+# libsoup-style layout: the project root is on the include path so
+# every #include uses the <libksuid/foo.h> form, which works
+# uniformly for in-tree builds, downstream consumers, and the
+# generated install tree (${prefix}/include/libksuid/ksuid.h).
+inc = include_directories('.')
+public_headers = files('libksuid/ksuid.h')
 
 core_sources = files(
-  'src/ksuid.c',
-  'src/base62.c',
-  'src/sequence.c',
-  'src/rand_os.c',
-  'src/rand_tls.c',
-  'src/chacha20.c',
+  'libksuid/ksuid.c',
+  'libksuid/base62.c',
+  'libksuid/sequence.c',
+  'libksuid/rand_os.c',
+  'libksuid/rand_tls.c',
+  'libksuid/chacha20.c',
 )
 
 ksuid_lib = both_libraries('ksuid', core_sources,
@@ -70,7 +74,7 @@ ksuid_lib = both_libraries('ksuid', core_sources,
   install             : true,
 )
 
-install_headers(public_headers)
+install_headers(public_headers, subdir : 'libksuid')
 
 # License + attribution artifacts MUST ship with every redistribution
 # of libksuid in source or binary form: LGPL-3.0-or-later requires the
@@ -92,7 +96,7 @@ pkg.generate(ksuid_lib.get_shared_lib(),
 
 if get_option('cli')
   ksuid_gen = executable('ksuid-gen',
-    'cli/ksuid_gen.c',
+    'examples/ksuid-gen.c',
     include_directories : inc,
     link_with : ksuid_lib.get_static_lib(),
     install : true,

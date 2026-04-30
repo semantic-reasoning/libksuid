@@ -14,7 +14,7 @@
  *                                 and format
  *   ksuid-gen -v              -- prefix each line with "<ksuid>: "
  */
-#include <ksuid.h>
+#include <libksuid/ksuid.h>
 
 #include <errno.h>
 #include <inttypes.h>

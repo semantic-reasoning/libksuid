@@ -15,7 +15,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "byteorder.h"
+#include <libksuid/byteorder.h>
 
 /* Increment the 16-byte big-endian payload at |p| in place by 1.
  * Returns true iff the increment overflowed (i.e. all payload bytes

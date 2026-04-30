@@ -1,4 +1,4 @@
-test_inc = include_directories('.', '..' / 'include')
+test_inc = include_directories('.', '..')
 
 test_link = ksuid_lib.get_static_lib()
 

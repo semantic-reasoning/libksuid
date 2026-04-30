@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include <ksuid.h>
+#include <libksuid/ksuid.h>
 
 /* Encode |in| (exactly KSUID_BYTES = 20 bytes) as |out| (exactly
  * KSUID_STRING_LEN = 27 base62 characters). Output is left-padded with

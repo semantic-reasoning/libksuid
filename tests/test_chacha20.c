@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
-#include "../src/chacha20.h"
+#include <libksuid/chacha20.h>
 #include "test_util.h"
 
 /* RFC 8439 section 2.3.2 test vector.

@@ -48,6 +48,30 @@ meson compile -C build
 meson test    -C build
 ```
 
+## Layout
+
+The repository follows the libsoup-style single-source-directory
+convention. All public and private library code lives under
+`libksuid/`, and every C file -- inside the library, in tests, and in
+examples -- includes its dependencies with the prefixed form
+
+```c
+#include <libksuid/ksuid.h>          /* the public umbrella */
+#include <libksuid/base62.h>         /* internal helper */
+```
+
+After install the public header lands at
+`${prefix}/include/libksuid/ksuid.h`, so downstream consumers use the
+exact same include line that the in-tree sources do.
+
+```
+libksuid/        library source + headers (public ksuid.h here too)
+examples/        example consumers; ksuid-gen CLI
+tests/           unit + integration tests
+tools/           build tooling (gst-indent)
+hooks/           git hooks (pre-commit code-style check)
+```
+
 ## Acknowledgements
 
 The KSUID specification, base62 alphabet, encoding scheme, and reference

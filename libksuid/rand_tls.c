@@ -19,7 +19,7 @@
  * itself; if it ever shows up in profiling the obvious tightening is
  * to gate the getpid() call behind the bytes_emitted threshold.
  */
-#include "rand.h"
+#include <libksuid/rand.h>
 
 #include <stdbool.h>
 #include <string.h>
@@ -37,7 +37,7 @@
 #  define KSUID_GETPID() ((int64_t) getpid ())
 #endif
 
-#include "chacha20.h"
+#include <libksuid/chacha20.h>
 
 #define KSUID_RNG_RESEED_BYTES   (1u << 20)     /* 1 MiB                   */
 #define KSUID_RNG_RESEED_SECONDS 3600   /* 1 hour                  */
