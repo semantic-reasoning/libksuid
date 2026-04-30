@@ -44,6 +44,41 @@ if cc.has_function('getentropy', prefix : '#include <unistd.h>')
   common_args += '-DKSUID_HAVE_GETENTROPY=1'
 endif
 
+# DSE-resistant wipe primitive (issue #2). The explicit_bzero
+# prototype lives in different headers on different platforms:
+# modern glibc (2.25+), macOS 14.4+, and OpenBSD declare it in
+# <string.h>; FreeBSD, NetBSD, and some older glibc / MUSL builds
+# put it in <strings.h>. Probe <string.h> first (the common case)
+# and fall back to <strings.h>.
+#
+# Pass _DEFAULT_SOURCE explicitly because meson does not inherit
+# add_project_arguments() into has_function() probes, and glibc
+# gates the prototype behind that feature macro.
+#
+# memset_s is the C11 Annex K third option; rarely shipped.
+# Windows uses SecureZeroMemory unconditionally (the macro lives
+# in <windows.h> and cc.has_function lies on macros, so detect by
+# host system instead).
+wipe_backend = 'volatile-fallback'
+if cc.has_function('explicit_bzero',
+    prefix : '#include <string.h>',
+    args   : ['-D_DEFAULT_SOURCE'])
+  common_args += '-DKSUID_HAVE_EXPLICIT_BZERO_STRING_H=1'
+  wipe_backend = 'explicit_bzero (<string.h>)'
+elif cc.has_function('explicit_bzero',
+    prefix : '#include <strings.h>',
+    args   : ['-D_DEFAULT_SOURCE'])
+  common_args += '-DKSUID_HAVE_EXPLICIT_BZERO_STRINGS_H=1'
+  wipe_backend = 'explicit_bzero (<strings.h>)'
+elif host_machine.system() == 'windows'
+  wipe_backend = 'SecureZeroMemory'
+elif cc.has_function('memset_s',
+    prefix : '#define __STDC_WANT_LIB_EXT1__ 1\n#include <string.h>')
+  common_args += '-DKSUID_HAVE_MEMSET_S=1'
+  wipe_backend = 'memset_s (C11 Annex K)'
+endif
+summary({'wipe backend' : wipe_backend}, section : 'libksuid')
+
 # Windows: the supported entropy source is BCryptGenRandom. The whole
 # /dev/urandom + getrandom + getentropy chain doesn't apply, and
 # rand_os.c switches to a Bcrypt-only path when KSUID_HAVE_BCRYPT is
