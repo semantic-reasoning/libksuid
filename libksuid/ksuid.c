@@ -17,14 +17,14 @@
 #include <libksuid/byteorder.h>
 #include <libksuid/rand.h>
 
-KSUID_PUBLIC const ksuid_t KSUID_NIL = {.b = {0} };
-
-KSUID_PUBLIC const ksuid_t KSUID_MAX = {
-  .b = {
-        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-      },
-};
+/* Drive both definitions from the public KSUID_*_INIT macros so the
+ * runtime symbols and the static-storage initializer form can never
+ * drift out of byte-for-byte agreement -- the regression
+ * test_init_macros_match_symbols pins the same equivalence at runtime
+ * but a single source of truth at the definition site removes the
+ * possibility entirely. */
+KSUID_PUBLIC const ksuid_t KSUID_NIL = KSUID_NIL_INIT;
+KSUID_PUBLIC const ksuid_t KSUID_MAX = KSUID_MAX_INIT;
 
 bool
 ksuid_is_nil (const ksuid_t *id)
