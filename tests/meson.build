@@ -14,6 +14,26 @@ base_tests = ['test_smoke', 'test_parts', 'test_base62', 'test_parse_format',
               'test_chacha20', 'test_new', 'test_simd_parity',
               'test_wipe', 'test_compare_parity', 'test_string_batch']
 
+# test_divisor_magic verifies the auto-generated divisor_magic.h
+# (Granlund-Moeller floor + correction reciprocal) against straight
+# integer division for >=2^20 random inputs. The reference uses
+# __uint128_t for mulhi64, which GCC and Clang provide on every
+# 64-bit target; MSVC does not, so the test only registers when the
+# compiler advertises the type. The AVX2 kernel that consumes the
+# same magic constant will only be built where __uint128_t is
+# available anyway.
+have_uint128 = cc.has_type('__uint128_t') or cc.has_type('unsigned __int128')
+# test_divisor_magic uses __uint128_t for its mulhi64 reference,
+# which is a GCC/Clang extension flagged by -Wpedantic. Suppress
+# the pedantic warning for this single test TU rather than dropping
+# warning_level=3 across the whole build.
+if have_uint128
+  test_divisor_magic_args = []
+  if cc.has_argument('-Wno-pedantic')
+    test_divisor_magic_args += '-Wno-pedantic'
+  endif
+endif
+
 foreach t : base_tests
   exe = executable(t, t + '.c',
     include_directories : test_inc,
@@ -21,6 +41,15 @@ foreach t : base_tests
   )
   test(t, exe, timeout : 30)
 endforeach
+
+if have_uint128
+  exe = executable('test_divisor_magic', 'test_divisor_magic.c',
+    include_directories : test_inc,
+    link_with : test_link,
+    c_args : test_divisor_magic_args,
+  )
+  test('test_divisor_magic', exe, timeout : 30)
+endif
 
 if have_threads_h and threads_dep.found()
   # test_rand_tls compiles with -DKSUID_TESTING=1 only when the
