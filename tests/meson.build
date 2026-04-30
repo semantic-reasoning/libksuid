@@ -24,12 +24,16 @@ foreach t : ['test_smoke', 'test_parts', 'test_base62', 'test_parse_format',
 endforeach
 
 # Integration test for the ksuid-gen CLI; only registered when the
-# CLI is built (default on).
+# CLI is built (default on). meson resolves File objects and build
+# targets to absolute paths automatically when they appear in test()
+# args, so we pass them as-is rather than calling .full_path() (which
+# is not available on File objects in the meson shipped with Ubuntu
+# noble).
 if get_option('cli')
   sh = find_program('sh', required : true)
   test('test_cli',
     sh,
-    args : [files('test_cli.sh')[0].full_path(), ksuid_gen.full_path()],
+    args : [files('test_cli.sh')[0], ksuid_gen],
     timeout : 30,
   )
 endif
