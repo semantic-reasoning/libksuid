@@ -60,8 +60,10 @@
 #    define WIN32_LEAN_AND_MEAN
 #    include <windows.h>
 #  elif defined(KSUID_HAVE_MEMSET_S)
-#    define __STDC_WANT_LIB_EXT1__ 1
-#    include <string.h>
+/* __STDC_WANT_LIB_EXT1__ is set project-wide by meson when this
+ * branch is selected -- defining it here would be too late, the
+ * unconditional <string.h> include at the top of this header has
+ * already burned the prototype set without it. */
 #  endif
 #endif
 

@@ -75,6 +75,13 @@ elif host_machine.system() == 'windows'
 elif cc.has_function('memset_s',
     prefix : '#define __STDC_WANT_LIB_EXT1__ 1\n#include <string.h>')
   common_args += '-DKSUID_HAVE_MEMSET_S=1'
+  # Annex K's memset_s prototype is gated behind __STDC_WANT_LIB_EXT1__
+  # on every libc that provides it (glibc, Apple libc, MUSL...).
+  # Defining the opt-in macro project-wide -- not just inside wipe.h
+  # -- guarantees it is set before <string.h> is first included by
+  # ANY translation unit, since wipe.h cannot rewind a prior include
+  # that already pulled <string.h> in without the opt-in.
+  common_args += '-D__STDC_WANT_LIB_EXT1__=1'
   wipe_backend = 'memset_s (C11 Annex K)'
 endif
 summary({'wipe backend' : wipe_backend}, section : 'libksuid')
