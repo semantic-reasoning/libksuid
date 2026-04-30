@@ -16,7 +16,6 @@
 #include <libksuid/base62.h>
 #include <libksuid/byteorder.h>
 #include <libksuid/rand.h>
-#include <libksuid/uint128.h>
 
 KSUID_PUBLIC const ksuid_t KSUID_NIL = {.b = {0} };
 
@@ -133,33 +132,6 @@ void
 ksuid_format (const ksuid_t *id, char out[KSUID_STRING_LEN])
 {
   ksuid_base62_encode ((uint8_t *) out, id->b);
-}
-
-ksuid_t
-ksuid_next (const ksuid_t *id)
-{
-  ksuid_t out = *id;
-  if (ksuid_payload_incr (out.b + KSUID_TIMESTAMP_LEN)) {
-    /* Payload wrapped from 2^128 - 1 back to 0. Bump the 32-bit
-     * timestamp; if it also wraps the result is KSUID_NIL. Mirrors
-     * upstream Next at ksuid.go:355-367. */
-    uint32_t ts = ksuid_be32_load (out.b);
-    ksuid_be32_store (out.b, ts + 1);
-  }
-  return out;
-}
-
-ksuid_t
-ksuid_prev (const ksuid_t *id)
-{
-  ksuid_t out = *id;
-  if (ksuid_payload_decr (out.b + KSUID_TIMESTAMP_LEN)) {
-    /* Payload underflowed from 0 to 2^128 - 1; decrement the
-     * timestamp. ksuid.go:370-382. */
-    uint32_t ts = ksuid_be32_load (out.b);
-    ksuid_be32_store (out.b, ts - 1);
-  }
-  return out;
 }
 
 /* Atomic-pointer overrides for ksuid_set_rand. Readers use acquire
