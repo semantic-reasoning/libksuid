@@ -1,0 +1,31 @@
+# clang-tidy 22+ requires an explicit check selection; without this
+# file the tool emits "No checks enabled" and exits 1.
+#
+# We start with the high-signal, low-noise families (analyzer +
+# bugprone) and grow the list as the codebase tolerates it. New
+# checks should be added in a separate commit so the diff that
+# enables a check is the same diff that fixes its findings.
+---
+Checks: >
+  clang-analyzer-*,
+  bugprone-*,
+  cert-*,
+  performance-*,
+  portability-*,
+  -bugprone-easily-swappable-parameters,
+  -cert-err33-c,
+  -cert-msc24-c,
+  -cert-msc33-c,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+
+# Apply the same checks to headers that are part of libksuid.
+HeaderFilterRegex: '.*/libksuid/.*\.h$'
+
+# Don't reformat alongside fixes -- keep clang-tidy and gst-indent
+# concerns separate.
+FormatStyle: none
+
+# Pin warnings as warnings; the CI step greps for any "warning:" line
+# and fails the gate, so promoting them to errors here would just
+# confuse the reporting.
+WarningsAsErrors: ''

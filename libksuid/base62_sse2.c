@@ -27,6 +27,10 @@
 int
 ksuid_base62_translate16_sse2 (uint8_t out[16], const uint8_t in[16])
 {
+  /* _mm_loadu_si128 is the SSE2 unaligned-load intrinsic; the
+   * (__m128i *) cast is a documented part of the API and does not
+   * actually require 16-byte alignment. */
+  /* NOLINTNEXTLINE(clang-diagnostic-cast-align) */
   __m128i v = _mm_loadu_si128 ((const __m128i *) in);
 
   /* digit: v in '0'..'9' */
@@ -53,6 +57,8 @@ ksuid_base62_translate16_sse2 (uint8_t out[16], const uint8_t in[16])
   __m128i invalid_fill =
       _mm_andnot_si128 (any_mask, _mm_set1_epi8 ((char) 0xff));
   __m128i result = _mm_or_si128 (values, invalid_fill);
+  /* Mirror cast-alignment exemption: _mm_storeu_si128 is unaligned. */
+  /* NOLINTNEXTLINE(clang-diagnostic-cast-align) */
   _mm_storeu_si128 ((__m128i *) out, result);
 
   /* movemask collects the high bits; for an all-0xff mask we expect
