@@ -88,10 +88,10 @@ test_version_macros_are_consistent (void)
    *
    * When you bump meson.build's project version you MUST update
    * these four asserts in the same commit. */
-  ASSERT_EQ_INT (KSUID_VERSION_MAJOR, 0);
-  ASSERT_EQ_INT (KSUID_VERSION_MINOR, 1);
+  ASSERT_EQ_INT (KSUID_VERSION_MAJOR, 1);
+  ASSERT_EQ_INT (KSUID_VERSION_MINOR, 0);
   ASSERT_EQ_INT (KSUID_VERSION_PATCH, 0);
-  ASSERT_EQ_STR (KSUID_VERSION_STRING, "0.1.0");
+  ASSERT_EQ_STR (KSUID_VERSION_STRING, "1.0.0");
 
   /* The composite KSUID_VERSION must equal the documented
    * (MAJOR << 16) | (MINOR << 8) | PATCH layout for `#if

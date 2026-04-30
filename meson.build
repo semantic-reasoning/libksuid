@@ -1,5 +1,5 @@
 project('libksuid', 'c',
-  version : '0.1.0',
+  version : '1.0.0',
   license : 'LGPL-3.0-or-later AND MIT',
   meson_version : '>=1.1.0',
   default_options : [
@@ -237,7 +237,10 @@ ksuid_lib = both_libraries('ksuid', core_sources,
   dependencies        : extra_link_deps,
   link_whole          : avx2_lib_dep,
   version             : meson.project_version(),
-  soversion           : '0',
+  # soversion tracks semver major: a major bump means a binary-
+  # incompatible ABI break and the SONAME flips with it. 1.0 is the
+  # first stable ABI commitment.
+  soversion           : '1',
   install             : true,
 )
 

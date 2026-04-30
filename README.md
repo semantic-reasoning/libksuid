@@ -6,7 +6,9 @@ acceleration where the underlying algorithms admit it.
 
 ## Status
 
-Early development. The public API and ABI are unstable until 1.0.
+**1.0.0** — public API and ABI are stable. SONAME is `libksuid.so.1`;
+subsequent 1.x releases stay binary-compatible (semver). A breaking
+ABI change would require a 2.0 with a new SONAME.
 
 ## Goals
 
@@ -68,9 +70,14 @@ A release build on x86_64 produces (post-`strip --strip-unneeded`):
 
 | Artifact            | Bytes  |
 | :------------------ | -----: |
-| libksuid.so.0.1.0   | 18 560 |
-| libksuid.a          | 24 804 |
-| ksuid-gen (CLI)     | 27 464 |
+| libksuid.so.1.0.0   | 26 752 |
+| libksuid.a          | 35 212 |
+| ksuid-gen (CLI)     | 22 920 |
+
+The bulk-encode AVX2 kernel from `libksuid/encode_avx2.c` accounts for
+roughly 8 KB of the shared-library size; non-AVX2 hosts compile and
+link the kernel but never call into it, so the CPUID-gated dispatch
+adds no runtime cost to those targets.
 
 The shared library has zero runtime dependencies beyond the C library
 and, on Windows, `bcrypt.lib`.
