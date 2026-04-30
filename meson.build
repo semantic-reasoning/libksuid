@@ -185,13 +185,57 @@ if get_option('simd') != 'none'
   endif
 endif
 
+# AVX2 8-wide ksuid_string_batch kernel. Compiled in its own static
+# library with -mavx2 (or /arch:AVX2 on MSVC) so the rest of libksuid
+# keeps the SSE2 baseline ABI; the kernel is selected at runtime via
+# CPUID inside the dispatcher (libksuid/encode_batch.c). Non-x86_64
+# hosts skip this entirely; non-AVX2 x86_64 hosts compile the TU but
+# never call into it.
+have_avx2_batch = false
+avx2_arg = ''
+if get_option('simd') != 'none' and host_cpu == 'x86_64'
+  if get_option('avx2_batch').allowed()
+    if cc.get_argument_syntax() == 'msvc'
+      candidate = '/arch:AVX2'
+    else
+      candidate = '-mavx2'
+    endif
+    if cc.has_argument(candidate)
+      have_avx2_batch = true
+      avx2_arg = candidate
+      common_args += '-DKSUID_HAVE_AVX2_BATCH=1'
+    endif
+  endif
+endif
+
 # Apply collected defines + warnings only after the per-arch SIMD
-# section has had its chance to push KSUID_HAVE_SSE2 / _NEON.
+# section has had its chance to push KSUID_HAVE_SSE2 / _NEON /
+# _AVX2_BATCH.
 add_project_arguments(common_args, language : 'c')
+
+avx2_lib_dep = []
+if have_avx2_batch
+  # PIC required so the same objects can land in both the static and
+  # shared variants of `both_libraries('ksuid', ...)` below.
+  ksuid_avx2_lib = static_library('ksuid_avx2_batch',
+    'libksuid/encode_avx2.c',
+    include_directories : inc,
+    c_args              : [avx2_arg],
+    pic                 : true,
+    install             : false,
+  )
+  # link_whole forces every object from the AVX2 static lib into the
+  # final library archive even though the call site (the trampoline
+  # in encode_batch.c) only ever takes the address of the kernel
+  # behind a runtime CPUID check; without link_whole the linker may
+  # GC the symbol on shared-library link.
+  avx2_lib_dep = [ksuid_avx2_lib]
+endif
 
 ksuid_lib = both_libraries('ksuid', core_sources,
   include_directories : inc,
   dependencies        : extra_link_deps,
+  link_whole          : avx2_lib_dep,
   version             : meson.project_version(),
   soversion           : '0',
   install             : true,

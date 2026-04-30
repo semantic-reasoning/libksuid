@@ -4,3 +4,5 @@ option('cli', type : 'boolean', value : true,
        description : 'Build the ksuid-gen CLI tool')
 option('simd', type : 'combo', choices : ['auto', 'none'], value : 'auto',
        description : 'Enable SIMD/NEON acceleration (auto-detected per host arch)')
+option('avx2_batch', type : 'feature', value : 'auto',
+       description : 'Build the AVX2 8-wide ksuid_string_batch kernel (x86_64 only). Selected at runtime via CPUID; non-AVX2 hosts unaffected.')
