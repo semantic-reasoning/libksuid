@@ -10,7 +10,7 @@ threaded_tests = ['test_rand_tls']
 
 foreach t : ['test_smoke', 'test_parts', 'test_base62', 'test_parse_format',
              'test_sort', 'test_next_prev', 'test_sequence', 'test_rand_os',
-             'test_chacha20', 'test_rand_tls', 'test_new']
+             'test_chacha20', 'test_rand_tls', 'test_new', 'test_simd_parity']
   deps = []
   if threaded_tests.contains(t)
     deps += threads_dep

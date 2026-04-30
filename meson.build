@@ -48,7 +48,6 @@ foreach a : ['-Wshadow', '-Wstrict-prototypes', '-Wpointer-arith',
     common_args += a
   endif
 endforeach
-add_project_arguments(common_args, language : 'c')
 
 # libsoup-style layout: the project root is on the include path so
 # every #include uses the <libksuid/foo.h> form, which works
@@ -65,6 +64,30 @@ core_sources = files(
   'libksuid/rand_tls.c',
   'libksuid/chacha20.c',
 )
+
+# SIMD / NEON acceleration. SSE2 is part of the x86_64 ABI baseline
+# (mandatory since the AMD64 spec) and likewise NEON for aarch64,
+# so we compile the per-arch kernel TU directly into core_sources
+# without runtime feature detection. ARMv7 NEON is opt-in via
+# -mfpu=neon. Other hosts fall back to the scalar translate path
+# that lives unconditionally in base62.c.
+host_cpu = host_machine.cpu_family()
+if get_option('simd') != 'none'
+  if host_cpu == 'x86_64'
+    core_sources += files('libksuid/base62_sse2.c')
+    common_args += '-DKSUID_HAVE_SSE2=1'
+  elif host_cpu in ['aarch64', 'arm64']
+    core_sources += files('libksuid/base62_neon.c')
+    common_args += '-DKSUID_HAVE_NEON=1'
+  elif host_cpu == 'arm' and cc.has_argument('-mfpu=neon')
+    core_sources += files('libksuid/base62_neon.c')
+    common_args += '-DKSUID_HAVE_NEON=1'
+  endif
+endif
+
+# Apply collected defines + warnings only after the per-arch SIMD
+# section has had its chance to push KSUID_HAVE_SSE2 / _NEON.
+add_project_arguments(common_args, language : 'c')
 
 ksuid_lib = both_libraries('ksuid', core_sources,
   include_directories : inc,

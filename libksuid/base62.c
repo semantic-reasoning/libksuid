@@ -15,6 +15,7 @@
 
 #include <string.h>
 
+#include <libksuid/base62_simd.h>
 #include <libksuid/byteorder.h>
 
 /* The NUL terminator at index 62 is intentionally kept (no [62] fixed
@@ -112,14 +113,33 @@ ksuid_base62_encode (uint8_t out[KSUID_STRING_LEN],
   }
 }
 
+int
+ksuid_base62_translate16_scalar (uint8_t out[16], const uint8_t in[16])
+{
+  int valid = 1;
+  for (size_t i = 0; i < 16; ++i) {
+    uint8_t v = kB62Value[in[i]];
+    out[i] = v;
+    if (v == 0xff)
+      valid = 0;
+  }
+  return valid ? 0 : -1;
+}
+
 ksuid_err_t
 ksuid_base62_decode (uint8_t out[KSUID_BYTES],
     const uint8_t in[KSUID_STRING_LEN])
 {
-  /* Translate ASCII -> base62 value, rejecting anything outside the
-   * 62-character alphabet. */
+  /* The first 16 of 27 input characters go through the SIMD/NEON
+   * (or scalar) translate-and-validate kernel; the remaining 11 are
+   * handled via the same scalar table lookup that drives the
+   * fallback. The kernel's union-mask short-circuit and packed
+   * range tests dominate the per-character branch chain on every
+   * x86_64 / aarch64 host. */
   uint8_t bp[KSUID_STRING_LEN];
-  for (size_t i = 0; i < KSUID_STRING_LEN; ++i) {
+  if (KSUID_TRANSLATE16 (bp, in) < 0)
+    return KSUID_ERR_STR_VALUE;
+  for (size_t i = 16; i < KSUID_STRING_LEN; ++i) {
     uint8_t v = kB62Value[in[i]];
     if (v == 0xff)
       return KSUID_ERR_STR_VALUE;
