@@ -59,6 +59,17 @@ ksuid_lib = both_libraries('ksuid', core_sources,
 
 install_headers(public_headers)
 
+# License + attribution artifacts MUST ship with every redistribution
+# of libksuid in source or binary form: LGPL-3.0-or-later requires the
+# LGPL text, and the upstream MIT terms (LICENSE.MIT) require the
+# permission notice "be included in all copies or substantial portions
+# of the Software". NOTICE documents how the two combine.
+license_dir = get_option('datadir') / 'doc' / 'libksuid'
+install_data(
+  files('LICENSE', 'LICENSE.MIT', 'NOTICE'),
+  install_dir : license_dir,
+)
+
 pkg.generate(ksuid_lib.get_shared_lib(),
   name        : 'libksuid',
   description : 'Pure C11 port of segmentio/ksuid',
