@@ -68,6 +68,7 @@ typedef struct
   int64_t seed_time;            /* TIME_UTC seconds at last seed         */
   int64_t seed_pid;             /* getpid()/_getpid() at last seed       */
   bool seeded;
+  bool destructor_registered;   /* thread-exit wipe registered yet?      */
 } ksuid_tls_rng_t;
 
 static _Thread_local ksuid_tls_rng_t ksuid_tls_rng_;
@@ -86,6 +87,97 @@ ksuid_random_thread_state_wipe (void)
   ksuid_explicit_bzero (&ksuid_tls_rng_, sizeof ksuid_tls_rng_);
   ksuid_tls_in_destructor_ = false;
 }
+
+/* Per-platform thread-exit registration. Glibc / libc++abi /
+ * MUSL >= 1.2.0 expose __cxa_thread_atexit_impl, an undocumented
+ * but stable libc entry point that runs callbacks at thread exit.
+ * Windows uses FlsAlloc -- a Fiber Local Storage slot whose
+ * destructor callback fires on thread teardown regardless of
+ * static-vs-DLL link mode. Both paths are gated behind a meson
+ * cc.links() probe (commit 2 of the issue #4 series); platforms
+ * that don't match either branch fall through to the documented
+ * residue policy in the public header. */
+#if defined(KSUID_HAVE_CXA_THREAD_ATEXIT_IMPL)
+
+extern int __cxa_thread_atexit_impl (void (*fn) (void *), void *arg, void *dso);
+extern void *__dso_handle;
+
+static void
+ksuid_tls_atexit_trampoline (void *unused)
+{
+  (void) unused;
+  ksuid_random_thread_state_wipe ();
+}
+
+static void
+ksuid_tls_register_thread_exit (ksuid_tls_rng_t *r)
+{
+  if (r->destructor_registered)
+    return;
+  r->destructor_registered = true;
+  /* The third argument scopes the registration to this DSO so a
+   * dlclose(libksuid.so) tears down its registrations cleanly. */
+  (void) __cxa_thread_atexit_impl (ksuid_tls_atexit_trampoline, NULL,
+      &__dso_handle);
+}
+
+#elif defined(KSUID_HAVE_FLS)
+
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+
+static DWORD ksuid_fls_index_ = FLS_OUT_OF_INDEXES;
+static INIT_ONCE ksuid_fls_init_ = INIT_ONCE_STATIC_INIT;
+
+/* FlsAlloc callback signature is (PVOID) under NTAPI calling
+ * convention; mismatching it would corrupt the stack on x86_32 MSVC.
+ * The slot value is just a non-NULL sentinel ("this thread
+ * participated") -- the actual TLS state still lives in
+ * _Thread_local storage and is reachable from the same thread
+ * during teardown, before the runtime tears down its TLS. */
+static VOID NTAPI
+ksuid_fls_destroy (PVOID p)
+{
+  (void) p;
+  ksuid_random_thread_state_wipe ();
+}
+
+static BOOL CALLBACK
+ksuid_fls_init_once (PINIT_ONCE init_once, PVOID parameter, PVOID *context)
+{
+  (void) init_once;
+  (void) parameter;
+  (void) context;
+  ksuid_fls_index_ = FlsAlloc (ksuid_fls_destroy);
+  return TRUE;
+}
+
+static void
+ksuid_tls_register_thread_exit (ksuid_tls_rng_t *r)
+{
+  if (r->destructor_registered)
+    return;
+  InitOnceExecuteOnce (&ksuid_fls_init_, ksuid_fls_init_once, NULL, NULL);
+  if (ksuid_fls_index_ == FLS_OUT_OF_INDEXES)
+    return;
+  /* FlsSetValue with a non-NULL sentinel marks this thread as
+   * participating; ksuid_fls_destroy fires on thread exit. */
+  if (FlsSetValue (ksuid_fls_index_, (PVOID) (uintptr_t) 1))
+    r->destructor_registered = true;
+}
+
+#else /* No thread-exit hook on this platform */
+
+static void
+ksuid_tls_register_thread_exit (ksuid_tls_rng_t *r)
+{
+  /* Documented residue path: nothing to register. The bounded
+   * reseed cadence and ksuid_random_force_reseed are the only
+   * mitigations. */
+  (void) r;
+}
+
+#endif
 
 /* Returns wall-clock seconds (TIME_UTC), or -1 on clock failure. The
  * sentinel makes the should-reseed predicate fall through to the
@@ -140,6 +232,13 @@ ksuid_tls_rng_seed (ksuid_tls_rng_t *r)
   r->bytes_emitted = 0;
   r->seed_pid = KSUID_GETPID ();
   r->seed_time = ksuid_now_seconds ();
+  /* Register the thread-exit wipe BEFORE flipping the seeded flag
+   * -- if registration fails partway and the thread later exits we
+   * must not have a half-wired state where the TLS slot looks
+   * seeded but the destructor never fires. The registration is
+   * idempotent via r->destructor_registered, so calling it on
+   * every reseed is cheap. */
+  ksuid_tls_register_thread_exit (r);
   r->seeded = true;
   return 0;
 }

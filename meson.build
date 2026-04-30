@@ -86,6 +86,33 @@ elif cc.has_function('memset_s',
 endif
 summary({'wipe backend' : wipe_backend}, section : 'libksuid')
 
+# Issue #4 thread-exit wipe registration. Probe via cc.links() with
+# an explicit prototype rather than cc.has_function() because
+# __cxa_thread_atexit_impl is a private libc symbol that no public
+# header declares -- has_function would either spuriously fail
+# (no prototype) or spuriously pass (linker found a different
+# weak alias). Linking with the explicit prototype is the only
+# honest signal that the actual ABI matches what we're going to
+# call.
+thread_exit_backend = 'documented residue (no automatic wipe)'
+cxa_thread_atexit_test = '''
+extern int __cxa_thread_atexit_impl(void (*fn)(void *), void *arg, void *dso);
+extern void *__dso_handle;
+static void wipe(void *p) { (void)p; }
+int main(void) {
+  return __cxa_thread_atexit_impl(wipe, (void *)0, &__dso_handle);
+}
+'''
+if cc.links(cxa_thread_atexit_test,
+    name : '__cxa_thread_atexit_impl + __dso_handle')
+  common_args += '-DKSUID_HAVE_CXA_THREAD_ATEXIT_IMPL=1'
+  thread_exit_backend = '__cxa_thread_atexit_impl'
+elif host_machine.system() == 'windows'
+  common_args += '-DKSUID_HAVE_FLS=1'
+  thread_exit_backend = 'FlsAlloc (Windows)'
+endif
+summary({'thread-exit wipe' : thread_exit_backend}, section : 'libksuid')
+
 # Windows: the supported entropy source is BCryptGenRandom. The whole
 # /dev/urandom + getrandom + getentropy chain doesn't apply, and
 # rand_os.c switches to a Bcrypt-only path when KSUID_HAVE_BCRYPT is
