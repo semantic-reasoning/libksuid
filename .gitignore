@@ -22,3 +22,4 @@ vgcore.*
 *.gcov
 coverage/
 .DS_Store
+.omc/

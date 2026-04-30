@@ -67,6 +67,44 @@ KSUID_PUBLIC bool ksuid_is_nil(const ksuid_t *id);
  * the Go implementation's bytes.Compare semantics. Returns <0, 0, or >0. */
 KSUID_PUBLIC int  ksuid_compare(const ksuid_t *a, const ksuid_t *b);
 
+/* --------------------------------------------------------------------------
+ * Construction from raw inputs.
+ * -------------------------------------------------------------------------- */
+
+/* Copy the binary KSUID at |b| (which must be exactly KSUID_BYTES long) into
+ * |out|. On error |out| is left untouched. */
+KSUID_PUBLIC ksuid_err_t ksuid_from_bytes(ksuid_t *out, const uint8_t *b, size_t n);
+
+/* Build |out| from a Unix timestamp (in seconds) and a 16-byte payload. The
+ * timestamp must lie within the closed interval [KSUID_EPOCH_SECONDS,
+ * KSUID_EPOCH_SECONDS + UINT32_MAX] -- the full 32-bit lifetime of the KSUID
+ * format. Out-of-range inputs return KSUID_ERR_TIME_RANGE. */
+KSUID_PUBLIC ksuid_err_t ksuid_from_parts(ksuid_t *out,
+                                          int64_t unix_seconds,
+                                          const uint8_t *payload,
+                                          size_t payload_len);
+
+/* Convenience wrappers that return KSUID_NIL on any error. */
+KSUID_PUBLIC ksuid_t ksuid_from_bytes_or_nil(const uint8_t *b, size_t n);
+KSUID_PUBLIC ksuid_t ksuid_from_parts_or_nil(int64_t unix_seconds,
+                                             const uint8_t *payload,
+                                             size_t payload_len);
+
+/* --------------------------------------------------------------------------
+ * Field accessors.
+ * -------------------------------------------------------------------------- */
+
+/* The KSUID's 32-bit big-endian timestamp, uncorrected for the custom epoch. */
+KSUID_PUBLIC uint32_t ksuid_timestamp(const ksuid_t *id);
+
+/* The KSUID's timestamp interpreted as Unix seconds (i.e. timestamp + epoch). */
+KSUID_PUBLIC int64_t  ksuid_time_unix(const ksuid_t *id);
+
+/* Pointer into |id| to the 16-byte payload region (id->b + 4). The pointer is
+ * borrowed from |id|; do not free, and do not use after |id| goes out of
+ * scope. */
+KSUID_PUBLIC const uint8_t *ksuid_payload(const ksuid_t *id);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
