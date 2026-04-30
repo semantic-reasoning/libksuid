@@ -13,13 +13,25 @@ project('libksuid', 'c',
 cc = meson.get_compiler('c')
 pkg = import('pkgconfig')
 
-# Hardening / portability flags applied to all our TUs.
-common_args = [
-  '-D_DEFAULT_SOURCE',
-  '-D_POSIX_C_SOURCE=200809L',
-  '-fvisibility=hidden',
-  '-DKSUID_BUILDING=1',
-]
+# Hardening / portability flags applied to all our TUs. Compiler-
+# specific defaults split between gcc/clang and MSVC: visibility
+# control + POSIX feature macros only mean anything on the GCC-style
+# command line, and MSVC needs an explicit opt-in to C11 atomics
+# until they leave experimental status.
+common_args = ['-DKSUID_BUILDING=1']
+if cc.get_argument_syntax() == 'msvc'
+  # MSVC's <stdatomic.h> is gated behind /experimental:c11atomics
+  # until C11 atomics ship as fully supported (Microsoft Learn:
+  # /experimental:c11atomics). Without it the header emits
+  # #error: "C atomic support is not enabled".
+  common_args += ['/experimental:c11atomics']
+else
+  common_args += [
+    '-D_DEFAULT_SOURCE',
+    '-D_POSIX_C_SOURCE=200809L',
+    '-fvisibility=hidden',
+  ]
+endif
 
 # OS entropy source detection. Per-host: at most one of these is
 # preferred at runtime; the others either are not present (Windows has
@@ -42,12 +54,14 @@ if host_machine.system() == 'windows'
   extra_link_deps += bcrypt_dep
   common_args += '-DKSUID_HAVE_BCRYPT=1'
 endif
-foreach a : ['-Wshadow', '-Wstrict-prototypes', '-Wpointer-arith',
-             '-Wcast-align', '-Wconversion', '-Wmissing-prototypes']
-  if cc.has_argument(a)
-    common_args += a
-  endif
-endforeach
+if cc.get_argument_syntax() != 'msvc'
+  foreach a : ['-Wshadow', '-Wstrict-prototypes', '-Wpointer-arith',
+               '-Wcast-align', '-Wconversion', '-Wmissing-prototypes']
+    if cc.has_argument(a)
+      common_args += a
+    endif
+  endforeach
+endif
 
 # libsoup-style layout: the project root is on the include path so
 # every #include uses the <libksuid/foo.h> form, which works

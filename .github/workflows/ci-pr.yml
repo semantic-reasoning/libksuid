@@ -109,11 +109,18 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           DESTDIR="$PWD/staging" meson install -C builddir
+          # Architecture-independent paths are stable.
           test -f staging/usr/local/include/libksuid/ksuid.h
           test -f staging/usr/local/share/doc/libksuid/LICENSE
           test -f staging/usr/local/share/doc/libksuid/LICENSE.MIT
           test -f staging/usr/local/share/doc/libksuid/NOTICE
-          test -f staging/usr/local/lib/pkgconfig/libksuid.pc
+          # libksuid.pc / libksuid.a / libksuid.so live under
+          # ${libdir}, which on Debian-derived distros expands to
+          # lib/<triplet>/ (lib/x86_64-linux-gnu, etc.). Search
+          # rather than hard-code the path.
+          find staging -name 'libksuid.pc' -print | grep -q .
+          find staging -name 'libksuid.a'  -print | grep -q .
+          find staging -name 'libksuid.so' -print | grep -q .
 
   # ==========================================================================
   # Phase 3: Sanitizers (ASan + UBSan)

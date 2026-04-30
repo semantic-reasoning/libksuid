@@ -48,19 +48,24 @@ typedef struct
   uint8_t buf[64];
   size_t buf_pos;               /* bytes already consumed from |buf|     */
   uint64_t bytes_emitted;       /* since last seed                       */
-  int64_t seed_time;            /* CLOCK_REALTIME seconds at last seed   */
-  long seed_pid;                /* getpid() at last seed                 */
+  int64_t seed_time;            /* TIME_UTC seconds at last seed         */
+  int64_t seed_pid;             /* getpid()/_getpid() at last seed       */
   bool seeded;
 } ksuid_tls_rng_t;
 
 static _Thread_local ksuid_tls_rng_t ksuid_tls_rng_;
 
+/* Returns wall-clock seconds (TIME_UTC), or -1 on clock failure. The
+ * sentinel makes the should-reseed predicate fall through to the
+ * "now < seed_time" branch which forces a reseed -- the conservative
+ * choice when the clock is unreadable. timespec_get is C11 standard
+ * and available on glibc 2.16+, MSVC 2015+, and macOS 10.15+. */
 static int64_t
 ksuid_now_seconds (void)
 {
   struct timespec ts;
-  if (clock_gettime (CLOCK_REALTIME, &ts) != 0)
-    return 0;
+  if (timespec_get (&ts, TIME_UTC) != TIME_UTC)
+    return -1;
   return (int64_t) ts.tv_sec;
 }
 
