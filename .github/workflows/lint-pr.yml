@@ -69,30 +69,30 @@ jobs:
           fi
 
   # ==========================================================================
-  # Phase 1b: clang-tidy 18 (slow, up to 30 min)
+  # Phase 1b: clang-tidy 22 (slow, up to 30 min)
   # Runs only after gst-indent passes. Any warning/error fails the PR.
   # ==========================================================================
   clang-tidy-check:
-    name: clang-tidy 18
+    name: clang-tidy 22
     needs: [gst-indent-check]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install LLVM 18
+      - name: Install LLVM 22
         run: |
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
             | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
-          echo "deb https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-18 main" \
+          echo "deb https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main" \
             | sudo tee /etc/apt/sources.list.d/llvm-18.list
           sudo apt-get update
-          sudo apt-get install -y clang-tidy-18 clang-tools-18 \
+          sudo apt-get install -y clang-tidy-22 clang-tools-22 \
             meson ninja-build
 
       - name: Verify tool versions
         run: |
-          clang-tidy-18 --version
+          clang-tidy-22 --version
           meson --version
 
       - name: Configure build (for compile_commands.json)
@@ -101,7 +101,7 @@ jobs:
       - name: Run clang-tidy (hard gate)
         run: |
           set -o pipefail
-          run-clang-tidy-18 -p builddir \
+          run-clang-tidy-22 -p builddir \
             "^.*/libksuid/.*\.(c|h)$" \
             2>&1 | tee tidy-results.txt
           if grep -qE '^.*\.(c|h):[0-9]+:[0-9]+: (warning|error):' tidy-results.txt; then

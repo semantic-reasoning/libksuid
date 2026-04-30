@@ -56,25 +56,25 @@ jobs:
           fi
 
   # ==========================================================================
-  # Check 2: clang-tidy 18 (slow, up to 30 min)
+  # Check 2: clang-tidy 22 (slow, up to 30 min)
   # Non-blocking: findings reported as artifacts + summary.
   # ==========================================================================
   clang-tidy-check:
-    name: clang-tidy 18 (monitor)
+    name: clang-tidy 22 (monitor)
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install LLVM 18 + meson
+      - name: Install LLVM 22 + meson
         run: |
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
             | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
-          echo "deb https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-18 main" \
+          echo "deb https://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs)-22 main" \
             | sudo tee /etc/apt/sources.list.d/llvm-18.list
           sudo apt-get update
-          sudo apt-get install -y clang-tidy-18 clang-tools-18 \
+          sudo apt-get install -y clang-tidy-22 clang-tools-22 \
             meson ninja-build
 
       - name: Configure build (for compile_commands.json)
@@ -82,7 +82,7 @@ jobs:
 
       - name: Run clang-tidy
         run: |
-          run-clang-tidy-18 -p builddir \
+          run-clang-tidy-22 -p builddir \
             "^.*/libksuid/.*\.(c|h)$" \
             2>&1 | tee tidy-results.txt || true
 
