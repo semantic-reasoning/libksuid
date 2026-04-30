@@ -19,6 +19,13 @@
  * itself; if it ever shows up in profiling the obvious tightening is
  * to gate the getpid() call behind the bytes_emitted threshold.
  */
+/* The for_testing helpers below are always defined; their
+ * prototypes in rand.h are gated behind KSUID_TESTING so production
+ * callers can't reach them. Setting KSUID_TESTING here -- before the
+ * rand.h include -- pulls those prototypes into this TU and silences
+ * the -Wmissing-prototypes warning that would otherwise fire on the
+ * helper definitions further down. */
+#define KSUID_TESTING 1
 #include <libksuid/rand.h>
 
 #include <stdbool.h>
@@ -80,12 +87,52 @@ static _Thread_local ksuid_tls_rng_t ksuid_tls_rng_;
  * that is in the middle of being torn down. */
 static _Thread_local bool ksuid_tls_in_destructor_;
 
+/* Atomic counter incremented on every entry to
+ * ksuid_random_thread_state_wipe. Always defined and always
+ * incremented, regardless of KSUID_TESTING -- the cost is one
+ * relaxed atomic increment per wipe (~5 ns on x86_64) and the
+ * counter only matters to the test harness, which sees it through
+ * the KSUID_TESTING-gated extern declaration in rand.h. */
+#include <stdatomic.h>
+_Atomic int ksuid_thread_exit_wipes_observed;
+
 void
 ksuid_random_thread_state_wipe (void)
 {
   ksuid_tls_in_destructor_ = true;
   ksuid_explicit_bzero (&ksuid_tls_rng_, sizeof ksuid_tls_rng_);
   ksuid_tls_in_destructor_ = false;
+  atomic_fetch_add_explicit (&ksuid_thread_exit_wipes_observed, 1,
+      memory_order_relaxed);
+}
+
+void
+ksuid_random_thread_state_set_sentinel_for_testing (void)
+{
+  /* The test must have already triggered registration on this
+   * thread (via a real draw). We deliberately preserve the
+   * destructor_registered flag so the previously-registered hook
+   * still fires; the seeded flag is also kept true so the next
+   * draw doesn't overwrite the sentinel through the seed path. */
+  bool registered = ksuid_tls_rng_.destructor_registered;
+  memset (&ksuid_tls_rng_, 0xa5, sizeof ksuid_tls_rng_);
+  ksuid_tls_rng_.seeded = true;
+  ksuid_tls_rng_.destructor_registered = registered;
+}
+
+void
+ksuid_random_thread_state_peek_for_testing (uint8_t *out, size_t out_len)
+{
+  size_t n = sizeof ksuid_tls_rng_;
+  if (out_len < n)
+    n = out_len;
+  memcpy (out, &ksuid_tls_rng_, n);
+}
+
+size_t
+ksuid_random_thread_state_size_for_testing (void)
+{
+  return sizeof ksuid_tls_rng_;
 }
 
 /* Per-platform thread-exit registration. Glibc / libc++abi /
@@ -99,7 +146,12 @@ ksuid_random_thread_state_wipe (void)
  * residue policy in the public header. */
 #if defined(KSUID_HAVE_CXA_THREAD_ATEXIT_IMPL)
 
+/* Both identifiers below are reserved (double-underscore prefix), but
+ * they're how glibc / libc++abi spell the symbols we have to call.
+ * No public header declares them; we forward-declare them here. */
+/* NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) */
 extern int __cxa_thread_atexit_impl (void (*fn) (void *), void *arg, void *dso);
+/* NOLINTNEXTLINE(bugprone-reserved-identifier,cert-dcl37-c,cert-dcl51-cpp) */
 extern void *__dso_handle;
 
 static void
@@ -116,9 +168,12 @@ ksuid_tls_register_thread_exit (ksuid_tls_rng_t *r)
     return;
   r->destructor_registered = true;
   /* The third argument scopes the registration to this DSO so a
-   * dlclose(libksuid.so) tears down its registrations cleanly. */
+   * dlclose(libksuid.so) tears down its registrations cleanly.
+   * __dso_handle is `void *`, so we pass its address (a `void **`)
+   * cast to the `void *` ABI parameter via an explicit cast --
+   * silencing bugprone-multi-level-implicit-pointer-conversion. */
   (void) __cxa_thread_atexit_impl (ksuid_tls_atexit_trampoline, NULL,
-      &__dso_handle);
+      (void *) &__dso_handle);
 }
 
 #elif defined(KSUID_HAVE_FLS)

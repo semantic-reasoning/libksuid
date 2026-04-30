@@ -23,10 +23,28 @@ foreach t : base_tests
 endforeach
 
 if have_threads_h and threads_dep.found()
+  # test_rand_tls compiles with -DKSUID_TESTING=1 only when the
+  # platform exposes a thread-exit hook to assert against (issue #4
+  # commit 3). KSUID_TESTING reveals the prototypes of the
+  # for_testing helpers + the atomic ksuid_thread_exit_wipes_observed
+  # counter in libksuid/rand.h. The library itself unconditionally
+  # defines those symbols (cost: one relaxed atomic increment per
+  # wipe, ~5 ns on x86_64), so the test only needs the prototype to
+  # see them; no separate testing-enabled library object is
+  # required.
+  thread_exit_test_args = []
+  has_cxa = cc.get_define('KSUID_HAVE_CXA_THREAD_ATEXIT_IMPL',
+      args : common_args) == '1'
+  has_fls = cc.get_define('KSUID_HAVE_FLS',
+      args : common_args) == '1'
+  if has_cxa or has_fls
+    thread_exit_test_args += '-DKSUID_TESTING=1'
+  endif
   exe = executable('test_rand_tls', 'test_rand_tls.c',
     include_directories : test_inc,
     link_with : test_link,
     dependencies : threads_dep,
+    c_args : thread_exit_test_args,
   )
   test('test_rand_tls', exe, timeout : 30)
 else

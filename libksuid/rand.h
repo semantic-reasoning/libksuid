@@ -42,4 +42,34 @@ void ksuid_random_force_reseed (void);
  * caller. */
 void ksuid_random_thread_state_wipe (void);
 
+#ifdef KSUID_TESTING
+/* Test-only hooks compiled into the test binary via -DKSUID_TESTING=1
+ * (set per-test in tests/meson.build). They give tests/test_rand_tls.c
+ * a way to drive the wipe path deterministically without depending on
+ * thread-exit timing, and to peek at the post-wipe TLS state to prove
+ * the bytes were actually zeroed. None of these symbols are exported
+ * from the library; production builds compile without -DKSUID_TESTING
+ * and never see the prototypes. */
+
+/* Atomic counter incremented on every entry to
+ * ksuid_random_thread_state_wipe. The test asserts it ticks when the
+ * destructor runs at thread exit. */
+extern _Atomic int ksuid_thread_exit_wipes_observed;
+
+/* Fill the calling thread's TLS RNG state with a known sentinel
+ * pattern (0xa5 throughout, including the seeded flag) so the next
+ * call to ksuid_random_thread_state_wipe has something non-zero to
+ * erase. Must be called before any draw on the same thread. */
+void ksuid_random_thread_state_set_sentinel_for_testing (void);
+
+/* Copy the calling thread's TLS RNG state bytes into |out| (which
+ * must be at least sizeof(ksuid_tls_rng_t) -- the test is allowed to
+ * over-allocate). Used to assert the wipe actually zeroed the
+ * region. */
+void ksuid_random_thread_state_peek_for_testing (uint8_t * out, size_t out_len);
+
+/* Size in bytes that a peek buffer must accommodate. */
+size_t ksuid_random_thread_state_size_for_testing (void);
+#endif
+
 #endif /* KSUID_RAND_H */
