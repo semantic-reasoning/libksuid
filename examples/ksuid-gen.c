@@ -166,6 +166,11 @@ print_one (int format, const ksuid_t *id, int verbose)
     case FMT_RAW:
       print_raw (id);
       break;
+    default:
+      /* parse_format() validates the input; no other value reaches
+       * print_one. Branch exists to satisfy
+       * bugprone-switch-missing-default-case. */
+      break;
   }
 }
 
