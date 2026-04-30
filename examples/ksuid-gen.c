@@ -22,7 +22,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
 
 enum
 {
@@ -196,41 +195,63 @@ main (int argc, char **argv)
   int format = FMT_STRING;
   int verbose = 0;
 
-  int opt;
-  while ((opt = getopt (argc, argv, "n:f:vh")) != -1) {
-    switch (opt) {
-      case 'n':
-      {
+  /* Hand-rolled option parser. POSIX getopt(3) lives in <unistd.h>
+   * which is not available on Windows MSVC, and the four flags here
+   * are simple enough that pulling in a getopt shim would be more
+   * code than parsing them inline. The accepted spellings are:
+   *   -n N    (count, positive integer; -n N as separate tokens)
+   *   -f FMT  (format name)
+   *   -v      (verbose; switch)
+   *   -h      (help; switch)
+   * Combined short options (-vh) and attached values (-n4) are not
+   * supported -- the existing tests/test_cli.sh exercises only the
+   * separate-token spelling, matching upstream Go ksuid's CLI. */
+  int idx = 1;
+  while (idx < argc) {
+    const char *a = argv[idx];
+    if (a[0] != '-' || a[1] == '\0' || a[2] != '\0') {
+      /* Not a recognised option; treat as a positional KSUID. */
+      break;
+    }
+    char flag = a[1];
+    if (flag == 'v') {
+      verbose = 1;
+      ++idx;
+    } else if (flag == 'h') {
+      usage (stdout, argv[0]);
+      return 0;
+    } else if (flag == 'n' || flag == 'f') {
+      if (idx + 1 >= argc) {
+        fprintf (stderr, "missing argument for -%c\n", flag);
+        usage (stderr, argv[0]);
+        return 1;
+      }
+      const char *val = argv[idx + 1];
+      if (flag == 'n') {
         char *end;
         errno = 0;
-        long v = strtol (optarg, &end, 10);
+        long v = strtol (val, &end, 10);
         if (errno != 0 || *end != '\0' || v <= 0) {
-          fprintf (stderr, "invalid -n value: %s\n", optarg);
+          fprintf (stderr, "invalid -n value: %s\n", val);
           return 1;
         }
         count = v;
-        break;
-      }
-      case 'f':
-        format = parse_format (optarg);
+      } else {
+        format = parse_format (val);
         if (format < 0) {
-          fprintf (stderr, "unknown format: %s\n", optarg);
+          fprintf (stderr, "unknown format: %s\n", val);
           return 1;
         }
-        break;
-      case 'v':
-        verbose = 1;
-        break;
-      case 'h':
-        usage (stdout, argv[0]);
-        return 0;
-      default:
-        usage (stderr, argv[0]);
-        return 1;
+      }
+      idx += 2;
+    } else {
+      fprintf (stderr, "unknown option: %s\n", a);
+      usage (stderr, argv[0]);
+      return 1;
     }
   }
 
-  if (optind == argc) {
+  if (idx == argc) {
     /* Generation mode. */
     for (long i = 0; i < count; ++i) {
       ksuid_t id;
@@ -243,7 +264,7 @@ main (int argc, char **argv)
     }
   } else {
     /* Parse mode. */
-    for (int i = optind; i < argc; ++i) {
+    for (int i = idx; i < argc; ++i) {
       ksuid_t id;
       size_t len = strlen (argv[i]);
       ksuid_err_t e = ksuid_parse (&id, argv[i], len);
