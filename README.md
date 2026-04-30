@@ -107,6 +107,38 @@ faithful re-implementation of Go's `text/template` grammar in C is
 out of scope, and a "mostly compatible" template engine is worse than
 no engine at all.
 
+## Bulk encode
+
+When formatting many KSUIDs at once (database snapshots, log batches,
+network bulk responses), use the bulk variant rather than calling
+`ksuid_format` in a loop:
+
+```c
+ksuid_t ids[1024];
+char    out[1024 * KSUID_STRING_LEN];   /* no NUL terminators */
+
+ksuid_string_batch (ids, out, 1024);
+/* ids[i] is now at out[i * KSUID_STRING_LEN .. (i + 1) * KSUID_STRING_LEN - 1] */
+```
+
+The function is thread-safe for disjoint output buffers and `n == 0`
+is a no-op. Output is byte-identical to a `ksuid_format` loop --
+only the throughput differs.
+
+The implementation dispatches at first call to a kernel selected
+from CPU features via an atomic function pointer (libsodium-style
+trampoline; race-free without locks or allocation). Today that
+kernel is the per-ID scalar path on every supported host. The AVX2
+8-wide kernel that the issue tracker proposed
+([#5](https://github.com/semantic-reasoning/libksuid/issues/5)) is
+**not yet shipped** -- the implementation requires SIMD long-
+division-by-62 with reciprocal-multiplication magic constants
+verified against a parity corpus, and the dispatch infrastructure
+landed in this PR is the foundation that will be added in a
+follow-up. Until then, `ksuid_string_batch` is functionally
+equivalent to a `ksuid_format` loop with one acquire-load + one
+indirect call of overhead per call.
+
 ## Layout
 
 The repository follows the libsoup-style single-source-directory

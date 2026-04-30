@@ -164,13 +164,16 @@ extern "C"
  * KSUID, no NUL terminator anywhere in the buffer. The ID at index i
  * lands at out_27n[i * KSUID_STRING_LEN .. (i+1) * KSUID_STRING_LEN - 1].
  *
- * On x86_64 hosts with AVX2 the implementation processes eight KSUIDs
- * per outer-loop iteration, delivering ~4-6x throughput vs calling
- * ksuid_format in a loop. The dispatch is resolved lazily on the first
- * call (atomic, thread-safe) and the resolved pointer is reused for
- * the lifetime of the process. On hosts without AVX2 -- or when the
- * library was built with -Davx2_batch=disabled -- the function is the
- * straight per-ID scalar loop with no measurable overhead.
+ * The dispatch is resolved lazily on the first call (atomic, thread-
+ * safe) and the resolved pointer is reused for the lifetime of the
+ * process. The eventual AVX2 8-wide kernel will plug into this
+ * dispatcher and deliver ~4-6x throughput on x86_64 hosts that
+ * support it; in the current release every host resolves to the
+ * per-ID scalar path (a ksuid_format loop), and the dispatch is
+ * one acquire-load + one indirect call of overhead per call. The
+ * AVX2 kernel itself is tracked as a follow-up to libksuid issue
+ * #5; until it ships, ksuid_string_batch is functionally
+ * equivalent to a ksuid_format loop with no measurable overhead.
  *
  * No error path: every 20-byte ksuid_t encodes by construction. n == 0
  * is a no-op. The call is thread-safe for concurrent invocations on
