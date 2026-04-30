@@ -2,26 +2,35 @@ test_inc = include_directories('.', '..')
 
 test_link = ksuid_lib.get_static_lib()
 
-threads_dep = dependency('threads')
+# C11 <threads.h> is not available on Apple Clang's libc shipped with
+# macOS through at least Xcode 16 (April 2026); the rest of the
+# library is C11-clean but the threaded RNG test relies on it. Skip
+# the test rather than carry a pthread dependency just for one test.
+have_threads_h = cc.has_header('threads.h')
+threads_dep = dependency('threads', required : false)
 
-# Tests that need C11 <threads.h> link against the threads dep; others
-# don't need to.
-threaded_tests = ['test_rand_tls']
+base_tests = ['test_smoke', 'test_parts', 'test_base62', 'test_parse_format',
+              'test_sort', 'test_next_prev', 'test_sequence', 'test_rand_os',
+              'test_chacha20', 'test_new', 'test_simd_parity']
 
-foreach t : ['test_smoke', 'test_parts', 'test_base62', 'test_parse_format',
-             'test_sort', 'test_next_prev', 'test_sequence', 'test_rand_os',
-             'test_chacha20', 'test_rand_tls', 'test_new', 'test_simd_parity']
-  deps = []
-  if threaded_tests.contains(t)
-    deps += threads_dep
-  endif
+foreach t : base_tests
   exe = executable(t, t + '.c',
     include_directories : test_inc,
     link_with : test_link,
-    dependencies : deps,
   )
   test(t, exe, timeout : 30)
 endforeach
+
+if have_threads_h and threads_dep.found()
+  exe = executable('test_rand_tls', 'test_rand_tls.c',
+    include_directories : test_inc,
+    link_with : test_link,
+    dependencies : threads_dep,
+  )
+  test('test_rand_tls', exe, timeout : 30)
+else
+  message('Skipping test_rand_tls -- <threads.h> not available on this host')
+endif
 
 # Integration test for the ksuid-gen CLI; only registered when the
 # CLI is built (default on). meson resolves File objects and build
