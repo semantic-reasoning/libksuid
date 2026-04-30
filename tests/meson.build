@@ -32,6 +32,31 @@ else
   message('Skipping test_rand_tls -- <threads.h> not available on this host')
 endif
 
+# Issue #1 (KSUID_NIL_INIT / KSUID_MAX_INIT) is specifically about
+# Windows DLL consumers, where KSUID_PUBLIC expands to
+# __declspec(dllimport) and the public sentinel symbols stop being
+# constant expressions in user TUs. Every other test in this
+# directory links the static archive (where KSUID_BUILDING stays
+# defined and dllimport never triggers), so they DO NOT exercise
+# the regression issue #1 was filed against.
+#
+# This dedicated TU links the SHARED library and explicitly undefines
+# KSUID_BUILDING so the public header sees the dllimport / hidden-
+# visibility consumer code path. On Windows this catches the original
+# bug; on Linux/macOS it exercises shared-library export semantics
+# uniformly.
+if cc.get_argument_syntax() == 'msvc'
+  test_init_shared_args = ['/UKSUID_BUILDING']
+else
+  test_init_shared_args = ['-UKSUID_BUILDING']
+endif
+exe = executable('test_init_shared', 'test_init_shared.c',
+  include_directories : test_inc,
+  link_with : ksuid_lib.get_shared_lib(),
+  c_args : test_init_shared_args,
+)
+test('test_init_shared', exe, timeout : 30)
+
 # Integration test for the ksuid-gen CLI; only registered when the
 # CLI is built (default on). meson resolves File objects and build
 # targets to absolute paths automatically when they appear in test()

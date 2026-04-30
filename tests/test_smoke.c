@@ -2,6 +2,15 @@
 #include <libksuid/ksuid.h>
 #include "test_util.h"
 
+/* File-scope statics initialised from the public macros. The point of
+ * this test pattern is that exactly this codepath -- aggregate
+ * initialisation at static storage from a public sentinel -- is what
+ * fails to compile on Windows DLL with the symbol form (issue #1). If
+ * this TU compiles, KSUID_*_INIT works as a constant expression on
+ * the target. The runtime memcmp below proves the bytes are right. */
+static const ksuid_t kStaticNilInit = KSUID_NIL_INIT;
+static const ksuid_t kStaticMaxInit = KSUID_MAX_INIT;
+
 static void
 test_constants_have_expected_layout (void)
 {
@@ -49,6 +58,24 @@ test_compare_first_byte_dominates (void)
 }
 
 static void
+test_init_macros_match_symbols (void)
+{
+  /* File-scope statics: the codepath that fails on Windows DLL today.
+   * Byte-for-byte parity with the runtime symbols proves the macros
+   * encode the right constants. */
+  ASSERT_EQ_BYTES (kStaticNilInit.b, KSUID_NIL.b, KSUID_BYTES);
+  ASSERT_EQ_BYTES (kStaticMaxInit.b, KSUID_MAX.b, KSUID_BYTES);
+  ASSERT_TRUE (ksuid_is_nil (&kStaticNilInit));
+
+  /* Block-scope static storage: distinct codepath from file scope on
+   * some compilers, worth pinning separately. */
+  static const ksuid_t local_nil = KSUID_NIL_INIT;
+  static const ksuid_t local_max = KSUID_MAX_INIT;
+  ASSERT_TRUE (ksuid_is_nil (&local_nil));
+  ASSERT_EQ_BYTES (local_max.b, KSUID_MAX.b, KSUID_BYTES);
+}
+
+static void
 test_version_macros_are_consistent (void)
 {
   /* DELIBERATE SYNC POINT: these literal values must equal the
@@ -84,6 +111,7 @@ main (void)
   RUN_TEST (test_max_is_all_ff);
   RUN_TEST (test_compare_orders_lex);
   RUN_TEST (test_compare_first_byte_dominates);
+  RUN_TEST (test_init_macros_match_symbols);
   RUN_TEST (test_version_macros_are_consistent);
   TEST_MAIN_END ();
 }

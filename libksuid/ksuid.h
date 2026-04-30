@@ -47,6 +47,22 @@ extern "C"
     uint8_t b[KSUID_BYTES];
   } ksuid_t;
 
+/* The static-storage initializer macros below assume ksuid_t is
+ * exactly its byte array -- no padding, no extra fields. If a future
+ * change adds a field, the assertion fails at compile time and forces
+ * the macro author to update KSUID_NIL_INIT / KSUID_MAX_INIT in
+ * lockstep. C11 spells the assertion `_Static_assert`; C++ since
+ * C++11 spells it `static_assert`. Gate so the public header
+ * compiles for both, since this file lives inside extern "C" for
+ * C++ consumers. */
+#ifdef __cplusplus
+    static_assert (sizeof (ksuid_t) == KSUID_BYTES,
+      "ksuid_t must be exactly KSUID_BYTES; KSUID_*_INIT macros depend on it");
+#else
+    _Static_assert (sizeof (ksuid_t) == KSUID_BYTES,
+      "ksuid_t must be exactly KSUID_BYTES; KSUID_*_INIT macros depend on it");
+#endif
+
   typedef enum ksuid_err
   {
     KSUID_OK = 0,
@@ -59,8 +75,28 @@ extern "C"
     KSUID_ERR_TIME_RANGE = -7   /* unix_seconds outside KSUID epoch range */
   } ksuid_err_t;
 
+/* Two forms of the same sentinel values:
+ *
+ *   - KSUID_NIL / KSUID_MAX (extern const ksuid_t)
+ *       Use these for runtime comparison and parameter passing:
+ *           if (ksuid_compare (&id, &KSUID_NIL) == 0) ...
+ *
+ *   - KSUID_NIL_INIT / KSUID_MAX_INIT (aggregate-initializer macros)
+ *       Use these as constant expressions in a declaration:
+ *           static const ksuid_t g_zero = KSUID_NIL_INIT;
+ *       The macro form is REQUIRED on Windows DLL builds, where
+ *       KSUID_PUBLIC expands to __declspec(dllimport) and the
+ *       symbol is therefore not a constant expression in user TUs.
+ *
+ * The two forms are guaranteed byte-for-byte equal; tests/test_smoke.c
+ * pins the equivalence with ASSERT_EQ_BYTES. */
   KSUID_PUBLIC extern const ksuid_t KSUID_NIL;
   KSUID_PUBLIC extern const ksuid_t KSUID_MAX;
+
+#define KSUID_NIL_INIT { { 0 } }
+#define KSUID_MAX_INIT                                                       \
+  { { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,            \
+      0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff } }
 
 /* --------------------------------------------------------------------------
  * Predicates and ordering.
