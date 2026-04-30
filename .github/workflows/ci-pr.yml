@@ -105,6 +105,39 @@ jobs:
           call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
           meson test -C builddir --print-errorlogs
 
+      - name: Verify ksuid_explicit_bzero survives optimization
+        if: runner.os == 'Linux' && matrix.compiler == 'gcc'
+        run: |
+          # Issue #2: the DSE-resistant wipe in libksuid/wipe.h must
+          # actually emit a call (or equivalent indirect call) at
+          # every site in rand_tls.c and chacha20.c. A plain memset
+          # would be elided by -O2; explicit_bzero / SecureZeroMemory /
+          # the volatile-fn-ptr fallback must NOT be. This step proves
+          # the shim's calls survive into the optimised library by
+          # grepping the disassembly for either form: a direct call
+          # to explicit_bzero@plt (where the static-inline shim got
+          # inlined into its caller) or a call to the out-of-line
+          # ksuid_explicit_bzero symbol (where the compiler kept
+          # the shim as a function). At least four wipe sites exist
+          # in source: three in rand_tls.c plus one in chacha20.c, so
+          # counting >=4 surviving calls is the correctness floor.
+          # Path uses find -type f to skip symlinks AND the
+          # libksuid.so.<ver>.p object-archive directory that meson
+          # leaves alongside the real .so.
+          set -eux
+          shared=$(find builddir -maxdepth 1 -type f -name 'libksuid.so.*' \
+                   | grep -E 'libksuid\.so\.[0-9]+\.[0-9]+\.[0-9]+$' \
+                   | head -1)
+          test -n "$shared" || { echo "::error::no versioned libksuid.so found in builddir" >&2; exit 1; }
+          n=$(objdump -d "$shared" \
+              | grep -cE 'call .*<(explicit_bzero|ksuid_explicit_bzero)' \
+              || true)
+          echo "wipe call sites in optimised .so: $n"
+          if [ "$n" -lt 4 ]; then
+            echo "::error::Expected at least 4 surviving wipe calls in libksuid.so.*; found $n. DSE may have eaten the wipes." >&2
+            exit 1
+          fi
+
       - name: Verify install lays down license artifacts
         if: runner.os == 'Linux'
         run: |
@@ -124,7 +157,61 @@ jobs:
           find staging -name 'libksuid.so' -print | grep -q .
 
   # ==========================================================================
-  # Phase 2b: meson dist round-trip
+  # Phase 2b: Wipe-shim fallback path coverage (issue #2)
+  # The default build on every supported matrix lane resolves
+  # ksuid_explicit_bzero to a platform primitive (explicit_bzero,
+  # SecureZeroMemory, or memset_s). The portable volatile-fn-ptr
+  # fallback in libksuid/wipe.h therefore ships *unexercised* unless
+  # CI explicitly forces it. This job builds with
+  # KSUID_FORCE_VOLATILE_FALLBACK=1, which disables every primitive
+  # branch and exercises the fallback. test_wipe asserts the
+  # fallback still zeroes the buffers it is given (it does not
+  # assert DSE-resistance -- the auto-build disasm gate above is
+  # the DSE-resistance witness; this job witnesses fallback
+  # correctness on a host that would otherwise never run the path).
+  # ==========================================================================
+  wipe-fallback:
+    name: Wipe shim fallback path coverage
+    needs: [lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build
+
+      - name: Configure with KSUID_FORCE_VOLATILE_FALLBACK
+        run: |
+          meson setup builddir-fb \
+            -Dc_args=-DKSUID_FORCE_VOLATILE_FALLBACK=1
+
+      - name: Build
+        run: meson compile -C builddir-fb
+
+      - name: Run test_wipe under fallback shim
+        run: meson test -C builddir-fb test_wipe --print-errorlogs
+
+      - name: Confirm fallback path actually skipped explicit_bzero
+        run: |
+          # On the fallback path the shim must NOT emit a call to
+          # explicit_bzero@plt anywhere in the optimised library;
+          # grepping for any such reference catches a regression
+          # where a future contributor adds a primitive without
+          # gating on KSUID_FORCE_VOLATILE_FALLBACK.
+          set -eux
+          shared=$(find builddir-fb -maxdepth 1 -type f \
+                   -name 'libksuid.so.*' \
+                   | grep -E 'libksuid\.so\.[0-9]+\.[0-9]+\.[0-9]+$' \
+                   | head -1)
+          if objdump -d "$shared" | grep -qE 'call .*<explicit_bzero@plt>'; then
+            echo "::error::Fallback build leaked an explicit_bzero@plt call; KSUID_FORCE_VOLATILE_FALLBACK is not gating the primitive." >&2
+            exit 1
+          fi
+
+  # ==========================================================================
+  # Phase 2c: meson dist round-trip
   # Builds a source tarball, extracts it into a clean tree, and rebuilds
   # the library + tests from the tarball. Catches reproducibility
   # regressions in configure_file templates (R2 from issue #3): if a

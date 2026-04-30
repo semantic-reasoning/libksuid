@@ -12,6 +12,8 @@
 
 #include <string.h>
 
+#include <libksuid/wipe.h>
+
 #define ROTL32(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
 
 #define QR(a, b, c, d) do {                     \
@@ -55,4 +57,11 @@ ksuid_chacha20_block (uint8_t out[64], uint32_t state[16])
   state[12]++;
   if (state[12] == 0)
     state[13]++;
+
+  /* Wipe the local x[16] before returning. After the round-mixing it
+   * holds the keystream-mixed words, which a sibling stack frame
+   * with a stack-read primitive could lift. Defense in depth: cost
+   * is ~64 bytes wiped per 64-byte block, dominated by the chacha
+   * computation itself. */
+  ksuid_explicit_bzero (x, sizeof x);
 }

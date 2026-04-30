@@ -38,6 +38,14 @@
 #endif
 
 #include <libksuid/chacha20.h>
+#include <libksuid/wipe.h>
+
+/* TODO(#4): the per-thread ksuid_tls_rng_t below lives until the OS
+ * reclaims its TLS block, which means a thread that exits leaves the
+ * 64-byte ChaCha state and the 64-byte keystream buffer in process
+ * memory until then. Issue #4 covers wiping that state on thread
+ * exit. This file's wipes are bounded to the short-lived locals --
+ * the 44-byte seed buffer and the in-flight keystream chunks. */
 
 #define KSUID_RNG_RESEED_BYTES   (1u << 20)     /* 1 MiB                   */
 #define KSUID_RNG_RESEED_SECONDS 3600   /* 1 hour                  */
@@ -75,7 +83,7 @@ ksuid_tls_rng_seed (ksuid_tls_rng_t *r)
   uint8_t kn[44];               /* 32 key + 12 nonce */
   if (ksuid_os_random_bytes (kn, sizeof kn) < 0) {
     /* Wipe partial seed bytes before returning. */
-    memset (kn, 0, sizeof kn);
+    ksuid_explicit_bzero (kn, sizeof kn);
     return -1;
   }
   r->state[0] = KSUID_CHACHA20_C0;
@@ -96,9 +104,13 @@ ksuid_tls_rng_seed (ksuid_tls_rng_t *r)
         | ((uint32_t) kn[32 + i * 4 + 3] << 24);
   }
   /* Wipe seed material from local. The chacha state itself stays in
-   * TLS, but at least we limit the residue. */
-  memset (kn, 0, sizeof kn);
+   * TLS, but at least we limit the residue from leaving on the
+   * stack frame after this function returns. */
+  ksuid_explicit_bzero (kn, sizeof kn);
 
+  /* r->buf is about to be overwritten by the first chacha block; the
+   * memset is initialisation, not secret-erasure, so plain memset is
+   * fine here. */
   memset (r->buf, 0, sizeof r->buf);
   r->buf_pos = sizeof r->buf;   /* empty buffer, force first block */
   r->bytes_emitted = 0;
@@ -150,8 +162,10 @@ ksuid_random_bytes (uint8_t *buf, size_t n)
     size_t chunk = (n < avail) ? n : avail;
     memcpy (buf, r->buf + r->buf_pos, chunk);
     /* Wipe consumed keystream to limit forward exposure if memory is
-     * later inspected. */
-    memset (r->buf + r->buf_pos, 0, chunk);
+     * later inspected. ksuid_explicit_bzero blocks DSE here -- a
+     * plain memset would be elided by -O2 because the wiped bytes
+     * are not subsequently read. */
+    ksuid_explicit_bzero (r->buf + r->buf_pos, chunk);
     r->buf_pos += chunk;
     buf += chunk;
     n -= chunk;
