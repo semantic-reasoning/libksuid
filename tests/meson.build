@@ -22,3 +22,14 @@ foreach t : ['test_smoke', 'test_parts', 'test_base62', 'test_parse_format',
   )
   test(t, exe, timeout : 30)
 endforeach
+
+# Integration test for the ksuid-gen CLI; only registered when the
+# CLI is built (default on).
+if get_option('cli')
+  sh = find_program('sh', required : true)
+  test('test_cli',
+    sh,
+    args : [files('test_cli.sh')[0].full_path(), ksuid_gen.full_path()],
+    timeout : 30,
+  )
+endif

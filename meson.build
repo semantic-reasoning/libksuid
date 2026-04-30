@@ -90,6 +90,15 @@ pkg.generate(ksuid_lib.get_shared_lib(),
   filebase    : 'libksuid',
 )
 
+if get_option('cli')
+  ksuid_gen = executable('ksuid-gen',
+    'cli/ksuid_gen.c',
+    include_directories : inc,
+    link_with : ksuid_lib.get_static_lib(),
+    install : true,
+  )
+endif
+
 if get_option('tests')
   subdir('tests')
 endif
