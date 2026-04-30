@@ -31,6 +31,8 @@
 
 #include <stdatomic.h>
 #include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 #if defined(__x86_64__) || defined(_M_X64)
 #  if defined(__GNUC__) || defined(__clang__)
@@ -99,13 +101,37 @@ ksuid_string_batch_init_trampoline (const ksuid_t * ids, char *out_27n,
 static _Atomic ksuid_string_batch_fn g_batch_impl =
     &ksuid_string_batch_init_trampoline;
 
+/* KSUID_FORCE_SCALAR override (Critic R11). Reading getenv on the
+ * first dispatch only is safe -- the resolved pointer is cached for
+ * the lifetime of the process and the env var is consulted exactly
+ * once. The override exists so production deployments can pin the
+ * scalar path at startup if a future regression in the AVX2 kernel
+ * is discovered after rollout, without rebuilding the library.
+ *
+ * Recognised values: any non-empty, non-"0", non-"false" string
+ * disables the AVX2 kernel. NULL or unset = use the best kernel
+ * available on the host. */
+static int
+ksuid_force_scalar_env (void)
+{
+  const char *v = getenv ("KSUID_FORCE_SCALAR");
+  if (v == NULL || v[0] == '\0')
+    return 0;
+  if (strcmp (v, "0") == 0 || strcmp (v, "false") == 0
+      || strcmp (v, "FALSE") == 0)
+    return 0;
+  return 1;
+}
+
 static void
 ksuid_string_batch_init_trampoline (const ksuid_t *ids, char *out_27n, size_t n)
 {
   ksuid_string_batch_fn resolved = &ksuid_string_batch_scalar;
 #if defined(KSUID_HAVE_AVX2_BATCH)
-  if (ksuid_cpu_supports_avx2 ())
+  if (!ksuid_force_scalar_env () && ksuid_cpu_supports_avx2 ())
     resolved = &ksuid_string_batch_avx2;
+#else
+  (void) ksuid_force_scalar_env;        /* silence unused-static warning */
 #endif
   atomic_store_explicit (&g_batch_impl, resolved, memory_order_release);
   resolved (ids, out_27n, n);
