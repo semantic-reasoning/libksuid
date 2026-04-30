@@ -11,6 +11,7 @@
 
 #include <string.h>
 
+#include "base62.h"
 #include "byteorder.h"
 
 KSUID_PUBLIC const ksuid_t KSUID_NIL = { .b = {0} };
@@ -77,4 +78,19 @@ int64_t ksuid_time_unix(const ksuid_t *id) {
 
 const uint8_t *ksuid_payload(const ksuid_t *id) {
     return id->b + KSUID_TIMESTAMP_LEN;
+}
+
+ksuid_err_t ksuid_parse(ksuid_t *out, const char *s, size_t len) {
+    if (len != KSUID_STRING_LEN) return KSUID_ERR_STR_SIZE;
+    return ksuid_base62_decode(out->b, (const uint8_t *)s);
+}
+
+ksuid_t ksuid_parse_or_nil(const char *s, size_t len) {
+    ksuid_t out;
+    if (ksuid_parse(&out, s, len) != KSUID_OK) return KSUID_NIL;
+    return out;
+}
+
+void ksuid_format(const ksuid_t *id, char out[KSUID_STRING_LEN]) {
+    ksuid_base62_encode((uint8_t *)out, id->b);
 }

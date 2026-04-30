@@ -105,6 +105,23 @@ KSUID_PUBLIC int64_t  ksuid_time_unix(const ksuid_t *id);
  * scope. */
 KSUID_PUBLIC const uint8_t *ksuid_payload(const ksuid_t *id);
 
+/* --------------------------------------------------------------------------
+ * Base62 string conversion.
+ * -------------------------------------------------------------------------- */
+
+/* Decode |len| bytes of |s| (which must be exactly KSUID_STRING_LEN base62
+ * characters, no NUL terminator required) into |out|. Returns
+ * KSUID_ERR_STR_SIZE if |len| is wrong or KSUID_ERR_STR_VALUE if the input
+ * contains a non-alphanumeric character or encodes a value greater than
+ * KSUID_MAX. */
+KSUID_PUBLIC ksuid_err_t ksuid_parse(ksuid_t *out, const char *s, size_t len);
+KSUID_PUBLIC ksuid_t     ksuid_parse_or_nil(const char *s, size_t len);
+
+/* Write the 27-character base62 representation of |id| into |out|. The
+ * output is NOT NUL-terminated; callers needing a C string should size
+ * their buffer to KSUID_STRING_LEN + 1 and append '\0' themselves. */
+KSUID_PUBLIC void ksuid_format(const ksuid_t *id, char out[KSUID_STRING_LEN]);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
