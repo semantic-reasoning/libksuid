@@ -153,6 +153,7 @@ core_sources = files(
   'libksuid/rand_tls.c',
   'libksuid/chacha20.c',
   'libksuid/compare_scalar.c',
+  'libksuid/encode_batch.c',
 )
 
 # SIMD / NEON acceleration. SSE2 is part of the x86_64 ABI baseline
