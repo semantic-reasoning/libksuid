@@ -136,6 +136,21 @@ extern "C"
  * array is sorted by definition. */
   KSUID_PUBLIC bool ksuid_is_sorted (const ksuid_t * ids, size_t n);
 
+/* --------------------------------------------------------------------------
+ * Walk: adjacent KSUIDs in lexicographic order.
+ * -------------------------------------------------------------------------- */
+
+/* The KSUID immediately after |id| under ksuid_compare. Increments the
+ * 16-byte payload as a 128-bit big-endian integer; on overflow (payload
+ * was all-0xff) the 32-bit timestamp prefix is bumped, wrapping around
+ * to KSUID_NIL once the timestamp itself overflows. */
+  KSUID_PUBLIC ksuid_t ksuid_next (const ksuid_t * id);
+
+/* The KSUID immediately before |id| under ksuid_compare. Dual to
+ * ksuid_next: payload underflow (payload was all zero) decrements the
+ * timestamp, with the timestamp wrapping at zero. */
+  KSUID_PUBLIC ksuid_t ksuid_prev (const ksuid_t * id);
+
 #ifdef __cplusplus
 }                               /* extern "C" */
 #endif
