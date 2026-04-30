@@ -1,0 +1,172 @@
+name: CI PR
+
+# PR gate: 3-phase validation. Each phase blocks subsequent phases on
+# failure so a busted formatter doesn't pay for a 30-minute build run.
+#
+#   Phase 1 (Lint):       lint-pr.yml — gst-indent -> clang-tidy
+#   Phase 2 (Build/Test): Linux GCC + Clang, macOS Clang, Windows MSVC
+#   Phase 3 (Sanitizers): Linux + macOS ASan + UBSan
+#
+# Within Phase 2 fail-fast is OFF so we get the full matrix's results
+# even if one platform breaks first. Phase 3 only runs after Phase 2
+# matrix has cleared.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ==========================================================================
+  # Phase 1: Lint (hard gates, sequential)
+  # ==========================================================================
+  lint:
+    uses: ./.github/workflows/lint-pr.yml
+
+  # ==========================================================================
+  # Phase 2: Build & Test matrix
+  # Linux GCC, Linux Clang, macOS Clang, Windows MSVC
+  # ==========================================================================
+  build:
+    name: Build / ${{ matrix.os }} / ${{ matrix.compiler }}
+    needs: [lint]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+          - os: ubuntu-latest
+            compiler: clang
+            cc: clang
+          - os: macos-latest
+            compiler: clang
+            cc: clang
+          - os: windows-latest
+            compiler: msvc
+            cc: cl
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y clang
+          fi
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install meson ninja
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: pip install meson ninja
+
+      - name: Configure (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: meson setup builddir
+        env:
+          CC: ${{ matrix.cc }}
+
+      - name: Configure (Windows / MSVC)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          meson setup builddir
+
+      - name: Build (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: meson compile -C builddir
+
+      - name: Build (Windows / MSVC)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          meson compile -C builddir
+
+      - name: Test (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: meson test -C builddir --print-errorlogs
+
+      - name: Test (Windows / MSVC)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          meson test -C builddir --print-errorlogs
+
+      - name: Verify install lays down license artifacts
+        if: runner.os == 'Linux'
+        run: |
+          DESTDIR="$PWD/staging" meson install -C builddir
+          test -f staging/usr/local/include/libksuid/ksuid.h
+          test -f staging/usr/local/share/doc/libksuid/LICENSE
+          test -f staging/usr/local/share/doc/libksuid/LICENSE.MIT
+          test -f staging/usr/local/share/doc/libksuid/NOTICE
+          test -f staging/usr/local/lib/pkgconfig/libksuid.pc
+
+  # ==========================================================================
+  # Phase 3: Sanitizers (ASan + UBSan)
+  # Depends on Phase 2 build matrix passing.
+  # ==========================================================================
+  sanitizers:
+    name: Sanitizers / ${{ matrix.os }} / ${{ matrix.compiler }}
+    needs: [build]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+          - os: ubuntu-latest
+            compiler: clang
+            cc: clang
+          - os: macos-latest
+            compiler: clang
+            cc: clang
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y clang
+          fi
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install meson ninja
+
+      - name: Configure with sanitizers
+        run: >
+          meson setup builddir-san
+          -Db_sanitize=address,undefined
+          -Db_lundef=false
+          --buildtype=debug
+        env:
+          CC: ${{ matrix.cc }}
+
+      - name: Build
+        run: meson compile -C builddir-san
+
+      - name: Test
+        run: meson test -C builddir-san --print-errorlogs
+        env:
+          ASAN_OPTIONS: abort_on_error=1:halt_on_error=1
+          UBSAN_OPTIONS: abort_on_error=1:halt_on_error=1:print_stacktrace=1

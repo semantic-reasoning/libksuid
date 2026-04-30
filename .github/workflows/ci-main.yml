@@ -1,0 +1,206 @@
+name: CI Main
+
+# Non-blocking comprehensive monitoring on main pushes. Same matrix
+# as ci-pr.yml plus an ARM64 lane that exercises the NEON SIMD path
+# (since x86_64 hosts only build the SSE2 kernel). Every job runs to
+# completion; failures show up in the step summary but never block.
+#
+# Phases:
+#   Phase 1 (Lint):       lint-main.yml — gst-indent + clang-tidy
+#   Phase 2 (Build/Test): Linux GCC + Clang, macOS, Windows MSVC, ARM64 GCC
+#   Phase 3 (Sanitizers): Linux + macOS ASan + UBSan
+#   Phase 4 (Footprint):  size table for the stripped library
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ==========================================================================
+  # Phase 1: Lint monitoring
+  # ==========================================================================
+  lint:
+    uses: ./.github/workflows/lint-main.yml
+
+  # ==========================================================================
+  # Phase 2: Build & Test (parallel, non-blocking)
+  # Adds ARM64 (ubuntu-24.04-arm) so the NEON SIMD path actually
+  # gets exercised under CI; x86_64 lanes only build the SSE2 kernel.
+  # ==========================================================================
+  build:
+    name: Build / ${{ matrix.os_display || matrix.os }} / ${{ matrix.compiler }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+          - os: ubuntu-latest
+            compiler: clang
+            cc: clang
+          - os: macos-latest
+            compiler: clang
+            cc: clang
+          - os: windows-latest
+            compiler: msvc
+            cc: cl
+          # GitHub-hosted ARM64 runner exercises the NEON SIMD path.
+          - os: ubuntu-24.04-arm
+            os_display: ubuntu-24.04-arm
+            compiler: gcc
+            cc: gcc
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies (Linux + ARM64)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y clang
+          fi
+          # ARM64 sanity: confirm /proc/cpuinfo advertises the SIMD ISA
+          if [ "${{ matrix.os }}" = "ubuntu-24.04-arm" ]; then
+            grep -q 'asimd\|neon' /proc/cpuinfo \
+              && echo "ARM64 NEON / asimd advertised" \
+              || echo "::warning::ARM64 NEON not detected"
+          fi
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install meson ninja
+
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: pip install meson ninja
+
+      - name: Configure (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: meson setup builddir
+        env:
+          CC: ${{ matrix.cc }}
+
+      - name: Configure (Windows / MSVC)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          meson setup builddir
+
+      - name: Build (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: meson compile -C builddir
+
+      - name: Build (Windows / MSVC)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          meson compile -C builddir
+
+      - name: Test (Linux / macOS)
+        if: runner.os != 'Windows'
+        run: meson test -C builddir --print-errorlogs
+
+      - name: Test (Windows / MSVC)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          meson test -C builddir --print-errorlogs
+
+      - name: Footprint
+        if: runner.os == 'Linux' && matrix.compiler == 'gcc'
+        continue-on-error: true
+        run: |
+          rm -rf build-rel
+          meson setup build-rel --buildtype=release
+          meson compile -C build-rel
+          strip --strip-unneeded build-rel/libksuid.so.* 2>/dev/null || true
+          {
+            echo '## Footprint (stripped release build) — ${{ matrix.os }}'
+            echo ''
+            echo '| Artifact | Bytes |'
+            echo '|---|---:|'
+            for f in build-rel/libksuid.so.* build-rel/libksuid.a build-rel/ksuid-gen; do
+              [ -e "$f" ] && printf '| %s | %s |\n' "$(basename "$f")" "$(stat -c '%s' "$f")"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish results
+        if: always()
+        shell: bash
+        run: |
+          echo "## Build Results: ${{ matrix.os_display || matrix.os }} / ${{ matrix.compiler }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "Status: **${{ job.status }}** (non-blocking)" >> "$GITHUB_STEP_SUMMARY"
+
+  # ==========================================================================
+  # Phase 3: Sanitizers (ASan + UBSan, non-blocking)
+  # ==========================================================================
+  sanitizers:
+    name: Sanitizers / ${{ matrix.os }} / ${{ matrix.compiler }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            compiler: gcc
+            cc: gcc
+          - os: ubuntu-latest
+            compiler: clang
+            cc: clang
+          - os: macos-latest
+            compiler: clang
+            cc: clang
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            sudo apt-get install -y clang
+          fi
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install meson ninja
+
+      - name: Configure with sanitizers
+        run: >
+          meson setup builddir-san
+          -Db_sanitize=address,undefined
+          -Db_lundef=false
+          --buildtype=debug
+        env:
+          CC: ${{ matrix.cc }}
+
+      - name: Build
+        run: meson compile -C builddir-san
+
+      - name: Test
+        run: meson test -C builddir-san --print-errorlogs
+        env:
+          ASAN_OPTIONS: abort_on_error=1:halt_on_error=1
+          UBSAN_OPTIONS: abort_on_error=1:halt_on_error=1:print_stacktrace=1
+
+      - name: Publish results
+        if: always()
+        run: |
+          echo "## Sanitizer Results: ${{ matrix.os }} / ${{ matrix.compiler }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "Status: **${{ job.status }}** (non-blocking)" >> "$GITHUB_STEP_SUMMARY"
