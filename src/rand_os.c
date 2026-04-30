@@ -1,15 +1,17 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later
  *
- * Operating system entropy source for libksuid. Uses, in order of
- * preference:
+ * Operating system entropy source for libksuid. Per-platform path:
  *
- *   1. getrandom(2) -- Linux >=3.17, FreeBSD >=12, glibc >=2.25,
- *                       MUSL >=1.1.20. Always cryptographic.
- *   2. getentropy(3) -- macOS, OpenBSD. Capped at 256 bytes per call,
- *                       loops below to fill larger buffers.
- *   3. BCryptGenRandom -- Windows; not yet implemented in this file
- *                          (Windows is not a v1 target).
- *   4. /dev/urandom -- legacy Linux / portable fallback.
+ *   Windows: BCryptGenRandom with BCRYPT_USE_SYSTEM_PREFERRED_RNG.
+ *            No POSIX fallback chain is compiled in; if the call
+ *            fails the only sane outcome is to surface KSUID_ERR_RNG.
+ *
+ *   POSIX (Linux, *BSD, macOS): try in order
+ *     1. getrandom(2)  -- Linux >=3.17, FreeBSD >=12, glibc >=2.25,
+ *                          MUSL >=1.1.20, macOS >=12. Cryptographic.
+ *     2. getentropy(3) -- macOS >=10.12, OpenBSD. Capped at 256
+ *                          bytes per call; loops to fill bigger.
+ *     3. /dev/urandom  -- legacy Linux / portable POSIX fallback.
  *
  * On any failure the function returns -1 and the caller must surface
  * the error rather than degrading to a non-cryptographic source --
@@ -18,24 +20,61 @@
  */
 #include "rand.h"
 
-#include <errno.h>
-
-/* Pick exactly one preferred fast path based on what meson detected. */
-#if defined(KSUID_HAVE_GETRANDOM)
-#  include <sys/random.h>
-#  define KSUID_HAVE_FAST_PATH 1
-#elif defined(KSUID_HAVE_GETENTROPY)
+#if defined(KSUID_HAVE_BCRYPT)
+/* Windows path: BCryptGenRandom is the documented modern API for
+ * cryptographic randomness. Linking is handled by meson via Bcrypt.lib. */
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+#  include <bcrypt.h>
+#  ifndef STATUS_SUCCESS
+#    define STATUS_SUCCESS ((NTSTATUS) 0x00000000L)
+#  endif
+#else /* POSIX */
+#  include <errno.h>
+#  if defined(KSUID_HAVE_GETRANDOM)
+#    include <sys/random.h>
+#  endif
+#  if defined(KSUID_HAVE_GETENTROPY)
+#    include <unistd.h>
+#  endif
+/* /dev/urandom fallback always present on POSIX-ish hosts. */
+#  include <fcntl.h>
+#  include <sys/stat.h>
+#  include <sys/types.h>
 #  include <unistd.h>
-#  define KSUID_HAVE_FAST_PATH 1
 #endif
 
-/* /dev/urandom fallback is always available on POSIX-ish hosts. */
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
+#if defined(KSUID_HAVE_BCRYPT)
 
-#if defined(KSUID_HAVE_GETRANDOM)
+static int
+ksuid_random_via_bcrypt (uint8_t *buf, size_t n)
+{
+  /* BCryptGenRandom takes a ULONG length. On 64-bit Windows ULONG
+   * stays 32 bits, so we loop for buffers >= 4 GiB even though the
+   * libksuid hot path never asks for that much. */
+  while (n > 0) {
+    ULONG chunk = (n > 0xffffffffu) ? 0xffffffffu : (ULONG) n;
+    NTSTATUS s = BCryptGenRandom (NULL, buf, chunk,
+        BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+    if (s != STATUS_SUCCESS)
+      return -1;
+    buf += chunk;
+    n -= chunk;
+  }
+  return 0;
+}
+
+int
+ksuid_os_random_bytes (uint8_t *buf, size_t n)
+{
+  if (n == 0)
+    return 0;
+  return ksuid_random_via_bcrypt (buf, n);
+}
+
+#else /* POSIX path */
+
+#  if defined(KSUID_HAVE_GETRANDOM)
 static int
 ksuid_random_via_getrandom (uint8_t *buf, size_t n)
 {
@@ -51,9 +90,9 @@ ksuid_random_via_getrandom (uint8_t *buf, size_t n)
   }
   return 0;
 }
-#endif
+#  endif
 
-#if defined(KSUID_HAVE_GETENTROPY)
+#  if defined(KSUID_HAVE_GETENTROPY)
 static int
 ksuid_random_via_getentropy (uint8_t *buf, size_t n)
 {
@@ -67,7 +106,7 @@ ksuid_random_via_getentropy (uint8_t *buf, size_t n)
   }
   return 0;
 }
-#endif
+#  endif
 
 static int
 ksuid_random_via_urandom (uint8_t *buf, size_t n)
@@ -106,15 +145,17 @@ ksuid_os_random_bytes (uint8_t *buf, size_t n)
   if (n == 0)
     return 0;
 
-#if defined(KSUID_HAVE_GETRANDOM)
+#  if defined(KSUID_HAVE_GETRANDOM)
   if (ksuid_random_via_getrandom (buf, n) == 0)
     return 0;
-#endif
+#  endif
 
-#if defined(KSUID_HAVE_GETENTROPY)
+#  if defined(KSUID_HAVE_GETENTROPY)
   if (ksuid_random_via_getentropy (buf, n) == 0)
     return 0;
-#endif
+#  endif
 
   return ksuid_random_via_urandom (buf, n);
 }
+
+#endif /* POSIX path */

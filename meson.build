@@ -21,14 +21,26 @@ common_args = [
   '-DKSUID_BUILDING=1',
 ]
 
-# OS entropy source detection. We require *some* path that works; if
-# meson cannot prove one is available the build still succeeds because
-# rand_os.c's /dev/urandom fallback is always compiled in.
+# OS entropy source detection. Per-host: at most one of these is
+# preferred at runtime; the others either are not present (Windows has
+# neither getrandom nor getentropy) or are kept compiled-in as a
+# secondary fallback (urandom on POSIX).
 if cc.has_function('getrandom', prefix : '#include <sys/random.h>')
   common_args += '-DKSUID_HAVE_GETRANDOM=1'
 endif
 if cc.has_function('getentropy', prefix : '#include <unistd.h>')
   common_args += '-DKSUID_HAVE_GETENTROPY=1'
+endif
+
+# Windows: the supported entropy source is BCryptGenRandom. The whole
+# /dev/urandom + getrandom + getentropy chain doesn't apply, and
+# rand_os.c switches to a Bcrypt-only path when KSUID_HAVE_BCRYPT is
+# defined.
+extra_link_deps = []
+if host_machine.system() == 'windows'
+  bcrypt_dep = cc.find_library('bcrypt', required : true)
+  extra_link_deps += bcrypt_dep
+  common_args += '-DKSUID_HAVE_BCRYPT=1'
 endif
 foreach a : ['-Wshadow', '-Wstrict-prototypes', '-Wpointer-arith',
              '-Wcast-align', '-Wconversion', '-Wmissing-prototypes']
@@ -52,9 +64,10 @@ core_sources = files(
 
 ksuid_lib = both_libraries('ksuid', core_sources,
   include_directories : inc,
-  version  : meson.project_version(),
-  soversion : '0',
-  install  : true,
+  dependencies        : extra_link_deps,
+  version             : meson.project_version(),
+  soversion           : '0',
+  install             : true,
 )
 
 install_headers(public_headers)

@@ -24,7 +24,18 @@
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
+
+/* Per-platform getpid abstraction: POSIX getpid(2) vs Windows
+ * _getpid(3). Both return an int wide enough to hold the PID; we
+ * widen to int64_t for storage so the comparison is unambiguous. */
+#if defined(_WIN32)
+#  include <process.h>
+#  define KSUID_GETPID() ((int64_t) _getpid ())
+#else
+#  include <sys/types.h>
+#  include <unistd.h>
+#  define KSUID_GETPID() ((int64_t) getpid ())
+#endif
 
 #include "chacha20.h"
 
@@ -86,7 +97,7 @@ ksuid_tls_rng_seed (ksuid_tls_rng_t *r)
   memset (r->buf, 0, sizeof r->buf);
   r->buf_pos = sizeof r->buf;   /* empty buffer, force first block */
   r->bytes_emitted = 0;
-  r->seed_pid = (long) getpid ();
+  r->seed_pid = KSUID_GETPID ();
   r->seed_time = ksuid_now_seconds ();
   r->seeded = true;
   return 0;
@@ -99,10 +110,12 @@ ksuid_tls_rng_should_reseed (const ksuid_tls_rng_t *r)
     return true;
   if (r->bytes_emitted >= KSUID_RNG_RESEED_BYTES)
     return true;
-  if ((long) getpid () != r->seed_pid)
+  if (KSUID_GETPID () != r->seed_pid)
     return true;
   int64_t now = ksuid_now_seconds ();
-  if (now < r->seed_time)       /* clock went backwards */
+  /* now == -1 (clock failure) makes this branch fire -- safer to
+   * burn an extra reseed than to keep streaming from stale state. */
+  if (now < r->seed_time)
     return true;
   if (now - r->seed_time >= KSUID_RNG_RESEED_SECONDS)
     return true;
