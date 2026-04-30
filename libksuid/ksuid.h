@@ -9,6 +9,8 @@
 #ifndef KSUID_H
 #define KSUID_H
 
+#include <libksuid/ksuid_version.h>
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
