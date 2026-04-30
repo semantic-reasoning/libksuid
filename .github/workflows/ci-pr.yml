@@ -133,8 +133,12 @@ jobs:
               | grep -cE 'call .*<(explicit_bzero|ksuid_explicit_bzero)' \
               || true)
           echo "wipe call sites in optimised .so: $n"
-          if [ "$n" -lt 4 ]; then
-            echo "::error::Expected at least 4 surviving wipe calls in libksuid.so.*; found $n. DSE may have eaten the wipes." >&2
+          # Floor was 4 (3 sites in rand_tls.c + 1 in chacha20.c) before
+          # issue #4. The new ksuid_random_thread_state_wipe adds a fifth
+          # ksuid_explicit_bzero call to the library's surviving set, so
+          # the floor moves to 5.
+          if [ "$n" -lt 5 ]; then
+            echo "::error::Expected at least 5 surviving wipe calls in libksuid.so.*; found $n. DSE may have eaten the wipes." >&2
             exit 1
           fi
 

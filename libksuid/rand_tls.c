@@ -40,12 +40,21 @@
 #include <libksuid/chacha20.h>
 #include <libksuid/wipe.h>
 
-/* TODO(#4): the per-thread ksuid_tls_rng_t below lives until the OS
- * reclaims its TLS block, which means a thread that exits leaves the
- * 64-byte ChaCha state and the 64-byte keystream buffer in process
- * memory until then. Issue #4 covers wiping that state on thread
- * exit. This file's wipes are bounded to the short-lived locals --
- * the 44-byte seed buffer and the in-flight keystream chunks. */
+/* Thread-exit residue policy: the per-thread ksuid_tls_rng_t below
+ * holds 64 bytes of ChaCha20 state plus a 64-byte keystream window.
+ * On platforms with a thread-exit hook (glibc 2.18+
+ * __cxa_thread_atexit_impl, MUSL >= 1.2.0, libc++abi on macOS, FLS
+ * on Windows -- detected and registered in commit 2 of issue #4)
+ * ksuid_random_thread_state_wipe is invoked automatically at thread
+ * teardown. On platforms without such a hook the residue persists
+ * until the OS reclaims the TLS block; callers requiring stronger
+ * guarantees should call ksuid_random_force_reseed() before joining
+ * the worker thread.
+ *
+ * The wipe entry point itself is implemented in this file (commit 1)
+ * even when no platform hook fires, so the test harness can drive it
+ * via the KSUID_TESTING-gated for_testing helpers added in commit 3.
+ */
 
 #define KSUID_RNG_RESEED_BYTES   (1u << 20)     /* 1 MiB                   */
 #define KSUID_RNG_RESEED_SECONDS 3600   /* 1 hour                  */
@@ -62,6 +71,21 @@ typedef struct
 } ksuid_tls_rng_t;
 
 static _Thread_local ksuid_tls_rng_t ksuid_tls_rng_;
+
+/* Re-entry guard for ksuid_random_thread_state_wipe. A future change
+ * that adds, e.g., a debug-log call inside the wipe path could call
+ * back into ksuid_random_bytes; the guarded ksuid_random_bytes path
+ * returns the RNG-failure sentinel rather than reseeding into a slot
+ * that is in the middle of being torn down. */
+static _Thread_local bool ksuid_tls_in_destructor_;
+
+void
+ksuid_random_thread_state_wipe (void)
+{
+  ksuid_tls_in_destructor_ = true;
+  ksuid_explicit_bzero (&ksuid_tls_rng_, sizeof ksuid_tls_rng_);
+  ksuid_tls_in_destructor_ = false;
+}
 
 /* Returns wall-clock seconds (TIME_UTC), or -1 on clock failure. The
  * sentinel makes the should-reseed predicate fall through to the
@@ -148,6 +172,12 @@ ksuid_random_force_reseed (void)
 int
 ksuid_random_bytes (uint8_t *buf, size_t n)
 {
+  /* Re-entry from inside ksuid_random_thread_state_wipe is a bug:
+   * it would reseed into a TLS slot that is being torn down. Bail
+   * with the RNG-failure sentinel so the caller surfaces the
+   * problem. */
+  if (ksuid_tls_in_destructor_)
+    return -1;
   ksuid_tls_rng_t *r = &ksuid_tls_rng_;
   if (ksuid_tls_rng_should_reseed (r)) {
     if (ksuid_tls_rng_seed (r) < 0)

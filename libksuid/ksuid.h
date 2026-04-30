@@ -191,6 +191,20 @@ extern "C"
  * streams without synchronisation; concurrent calls from the *same*
  * thread are not supported. On entropy-source failure the function
  * returns KSUID_ERR_RNG and leaves |*out| untouched.
+ *
+ * Thread-exit residue: the per-thread CSPRNG state holds 64 bytes
+ * of ChaCha20 state plus a 64-byte keystream window. On platforms
+ * with a thread-exit hook (glibc 2.18+ via __cxa_thread_atexit_impl,
+ * MUSL >= 1.2.0, libc++abi on macOS, FLS on Windows) libksuid wipes
+ * this state automatically when the owning thread exits. On other
+ * platforms the state persists in the TLS block until the OS
+ * reclaims it. Callers requiring stronger guarantees should call
+ * ksuid_set_rand(NULL, NULL) to no-op the override path and then
+ * draw + discard a single payload via ksuid_new() before joining
+ * the worker thread; the next call from the same TLS slot sees a
+ * fresh seed and the bounded reseed cadence (1 MiB / 1 hour /
+ * fork) keeps the residue window small even without a thread-exit
+ * hook.
  * -------------------------------------------------------------------------- */
 
 /* Generate a new KSUID stamped with the current wall-clock time. */
