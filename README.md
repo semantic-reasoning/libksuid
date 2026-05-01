@@ -1,14 +1,39 @@
 # libksuid
 
+> **⚠ ARCHIVED.** libksuid 1.0.0 is feature-complete and is preserved
+> here as a read-only artifact. Active development continues under a
+> broader scope in
+> [**libchronoid**](https://github.com/semantic-reasoning/libchronoid)
+> — a C11 toolkit for time-ordered identifiers that includes both the
+> original KSUID surface (renamed to `chronoid_ksuid_*`) and a new
+> UUIDv7 (RFC 9562) implementation as sibling formats under one
+> library.
+>
+> **Migration**:
+> - Header path: `<libksuid/ksuid.h>` → `<chronoid/ksuid.h>`
+> - Library / SONAME: `libksuid.so.1` → `libchronoid.so.0` (0.9.x
+>   pre-release; SONAME advances when libchronoid cuts 1.0)
+> - pkg-config: `libksuid.pc` → `libchronoid.pc`
+> - CLI: `ksuid-gen` → `chronoid-gen`
+> - Public API: `ksuid_*` / `KSUID_*` → `chronoid_ksuid_*` /
+>   `CHRONOID_KSUID_*` (semantics unchanged; wire format preserved
+>   bytewise)
+>
+> No new commits, issues, or PRs will be accepted on this repository.
+> Existing 1.0.0 consumers may continue to use `libksuid.so.1` as
+> shipped; libchronoid does not provide a libksuid.so.1-compatible
+> binary.
+
 A pure C11 port of [`segmentio/ksuid`](https://github.com/segmentio/ksuid)
 focused on small footprint, lock-free thread safety, and SIMD/NEON
 acceleration where the underlying algorithms admit it.
 
 ## Status
 
-**1.0.0** — public API and ABI are stable. SONAME is `libksuid.so.1`;
-subsequent 1.x releases stay binary-compatible (semver). A breaking
-ABI change would require a 2.0 with a new SONAME.
+**1.0.0** — public API and ABI are stable, repository archived
+2026-05-01. SONAME is `libksuid.so.1`; subsequent 1.x releases stay
+binary-compatible (semver) but no further releases will be cut from
+this repository.
 
 ## Goals
 
